@@ -6,10 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:init": "npx ts-node --project tsconfig.json scripts/init-db.ts"
   },
   "dependencies": {
+    "@auth/pg-adapter": "^1.11.1",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3",
     "next": "16.2.1",
+    "next-auth": "^5.0.0-beta.30",
+    "pg": "^8.20.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -18,9 +24,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.3.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
