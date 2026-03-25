@@ -1,4 +1,8 @@
-export default function HistoryPage() {
+interface HistoryPageProps {
+  userId: string
+}
+
+export default function HistoryPage({ userId }: HistoryPageProps) {
   const demoItems = [
     { type: 'mine', action: 'Minage effectué', time: 'Il y a 2 min', amount: '+1.00000000', positive: true },
     { type: 'ref', action: 'Bonus parrainage', time: 'Il y a 1h', amount: '+0.20000000', positive: true },

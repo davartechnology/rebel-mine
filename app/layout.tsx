@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import SessionWrapper from '@/components/layout/SessionWrapper'
 
 export const metadata: Metadata = {
   title: 'REBEL Mine — REBELONE',
-  description: 'Mine du REBEL et gagne de l\'argent réel. Première app de l\'écosystème REBELONE.',
+  description: 'Mine du REBEL et gagne de l\'argent réel.',
 }
 
 export default function RootLayout({
@@ -13,7 +14,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
-      <body>{children}</body>
+      <body>
+        <SessionWrapper session={null}>
+          {children}
+        </SessionWrapper>
+      </body>
     </html>
   )
 }

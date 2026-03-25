@@ -1,4 +1,8 @@
-export default function ReferralPage() {
+interface ReferralPageProps {
+  userId: string
+}
+
+export default function ReferralPage({ userId }: ReferralPageProps) {
   return (
     <div style={{
       maxWidth: '700px',

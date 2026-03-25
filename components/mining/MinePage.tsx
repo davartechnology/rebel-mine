@@ -1,4 +1,9 @@
-export default function MinePage() {
+interface MinePageProps {
+  userId: string
+  onBalanceUpdate: () => void
+}
+
+export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
   return (
     <div style={{
       maxWidth: '480px',
