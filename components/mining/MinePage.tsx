@@ -1,23 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-
-interface MiningStatus {
-  canMine: boolean
-  cooldownUntil: string | null
-  cooldownRemainingSeconds: number
-  activeSession: {
-    id: number
-    startedAt: string
-    animationSeconds: number
-  } | null
-  balance: string
-  totalMiningCount: number
-  todayEarned: string
-  miningReward: number
-  animationSeconds: number
-  cooldownMinutes: number
-}
+import AdOverlay from './AdOverlay'
+import MineButton from './MineButton'
+import BalanceCard from './BalanceCard'
 
 interface MinePageProps {
   userId: string
@@ -25,154 +11,191 @@ interface MinePageProps {
 }
 
 export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
-  const [status, setStatus] = useState<MiningStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [miningStartTime, setMiningStartTime] = useState<number | null>(null)
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
-  const [error, setError] = useState('')
-  const [miningComplete, setMiningComplete] = useState(false)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [status, setStatus] = useState<'idle' | 'mining' | 'cooldown'>('idle')
+  const [balance, setBalance] = useState('0.00000000')
+  const [animatedBalance, setAnimatedBalance] = useState('0.00000000')
+  const [animating, setAnimating] = useState(false)
+  const [cooldownSeconds, setCooldownSeconds] = useState(0)
+  const [totalMiningCount, setTotalMiningCount] = useState(0)
+  const [todayEarned, setTodayEarned] = useState('0.00000000')
+  const [showAd, setShowAd] = useState(false)
+  const [adType, setAdType] = useState<'video_reward' | 'interstitial'>('video_reward')
+  const [sessionId, setSessionId] = useState('')
+  const [adToken, setAdToken] = useState('')
+  const [miningReward, setMiningReward] = useState(1.0)
+  const [animationSeconds, setAnimationSeconds] = useState(300)
+  const [rewardFloat, setRewardFloat] = useState(false)
+  const animationRef = useRef<NodeJS.Timeout | null>(null)
+  const cooldownRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Fetch mining status
+  useEffect(() => {
+    fetchStatus()
+    return () => {
+      if (animationRef.current) clearInterval(animationRef.current)
+      if (cooldownRef.current) clearInterval(cooldownRef.current)
+    }
+  }, [])
+
   const fetchStatus = async () => {
     try {
       const res = await fetch('/api/mining/status')
       const data = await res.json()
-      setStatus(data)
-      
-      // If there's an active session, set up the timer
+
+      setBalance(data.balance || '0.00000000')
+      setAnimatedBalance(data.balance || '0.00000000')
+      setTotalMiningCount(data.totalMiningCount || 0)
+      setTodayEarned(data.todayEarned || '0.00000000')
+      setMiningReward(data.miningReward || 1.0)
+      setAnimationSeconds(data.animationSeconds || 300)
+
       if (data.activeSession) {
-        const startTime = new Date(data.activeSession.startedAt).getTime()
-        setMiningStartTime(startTime)
+        setStatus('mining')
+        setSessionId(data.activeSession.id)
+        const elapsed = (Date.now() - new Date(data.activeSession.startedAt).getTime()) / 1000
+        const remaining = Math.max(0, data.animationSeconds - elapsed)
+        startMiningAnimation(parseFloat(data.balance), data.miningReward, remaining, data.activeSession.id)
+      } else if (!data.canMine && data.cooldownRemainingSeconds > 0) {
+        setStatus('cooldown')
+        setCooldownSeconds(data.cooldownRemainingSeconds)
+        startCooldownTimer(data.cooldownRemainingSeconds)
       }
     } catch (err) {
-      console.error('Failed to fetch mining status:', err)
-    } finally {
-      setLoading(false)
+      console.error('Status error:', err)
     }
   }
 
-  useEffect(() => {
-    fetchStatus()
-  }, [userId])
+  const handleMineClick = async () => {
+    if (status !== 'idle') return
 
-  // Timer for active mining session
-  useEffect(() => {
-    if (miningStartTime && status?.activeSession) {
-      intervalRef.current = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - miningStartTime) / 1000)
-        setElapsedSeconds(elapsed)
-        
-        // Auto-complete when 5 minutes passed
-        if (elapsed >= 300 && !miningComplete) {
-          completeMining(status.activeSession!.id)
-        }
-      }, 1000)
-
-      return () => {
-        if (intervalRef.current) clearInterval(intervalRef.current)
-      }
-    }
-  }, [miningStartTime, status?.activeSession])
-
-  // Timer for cooldown countdown
-  useEffect(() => {
-    if (!status?.canMine && !status?.activeSession && (status?.cooldownRemainingSeconds ?? 0) > 0) {
-      intervalRef.current = setInterval(() => {
-        setStatus(prev => prev ? {
-          ...prev,
-          cooldownRemainingSeconds: Math.max(0, (prev.cooldownRemainingSeconds ?? 0) - 1)
-        } : null)
-      }, 1000)
-
-      return () => {
-        if (intervalRef.current) clearInterval(intervalRef.current)
-      }
-    }
-  }, [status?.canMine, status?.activeSession, status?.cooldownRemainingSeconds])
-
-  const startMining = async () => {
-    setError('')
     try {
       const res = await fetch('/api/mining/start', { method: 'POST' })
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error || 'Erreur lors du démarrage')
+        alert(data.error || 'Erreur lors du démarrage')
         return
       }
 
-      // Refresh status to get active session
-      await fetchStatus()
+      setSessionId(data.sessionId)
+      setAdToken(data.adToken)
+      setAdType(data.adType)
+      setShowAd(true)
     } catch (err) {
-      setError('Erreur de connexion')
+      console.error('Mine start error:', err)
     }
   }
 
-  const completeMining = async (sessionId: number) => {
+  const handleAdComplete = async () => {
+    setShowAd(false)
+
     try {
-      const res = await fetch('/api/mining/complete', {
+      const res = await fetch('/api/mining/verify-ad', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId })
+        body: JSON.stringify({ sessionId, adToken }),
       })
-      
+
       const data = await res.json()
-      
-      if (res.ok) {
-        setMiningComplete(true)
-        setTimeout(() => {
-          setMiningComplete(false)
-          fetchStatus()
-          onBalanceUpdate()
-        }, 2000)
+
+      if (!res.ok) {
+        alert(data.error || 'Erreur de vérification')
+        return
       }
+
+      setStatus('mining')
+      startMiningAnimation(
+        parseFloat(balance),
+        miningReward,
+        animationSeconds,
+        sessionId
+      )
     } catch (err) {
-      console.error('Complete mining error:', err)
+      console.error('Ad verify error:', err)
     }
   }
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
-    const s = seconds % 60
-    return `${m}:${s.toString().padStart(2, '0')}`
+  const startMiningAnimation = (
+    startBalance: number,
+    reward: number,
+    duration: number,
+    sid: string
+  ) => {
+    const startTime = Date.now()
+    const endBalance = startBalance + reward
+
+    if (animationRef.current) clearInterval(animationRef.current)
+
+    animationRef.current = setInterval(async () => {
+      const elapsed = (Date.now() - startTime) / 1000
+      const progress = Math.min(elapsed / duration, 1)
+      const current = startBalance + (reward * progress)
+
+      setAnimatedBalance(current.toFixed(8))
+      setAnimating(true)
+
+      if (progress >= 1) {
+        if (animationRef.current) clearInterval(animationRef.current)
+
+        try {
+          const res = await fetch('/api/mining/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: sid }),
+          })
+
+          const data = await res.json()
+
+          if (res.ok) {
+            setBalance(data.newBalance)
+            setAnimatedBalance(data.newBalance)
+            setTotalMiningCount(prev => prev + 1)
+            setTodayEarned(prev =>
+              (parseFloat(prev) + data.reward).toFixed(8)
+            )
+            onBalanceUpdate()
+            setRewardFloat(true)
+            setTimeout(() => setRewardFloat(false), 2000)
+
+            const cooldownRes = await fetch('/api/mining/status')
+            const cooldownData = await cooldownRes.json()
+            const remaining = cooldownData.cooldownRemainingSeconds || 1200
+
+            setStatus('cooldown')
+            setCooldownSeconds(remaining)
+            startCooldownTimer(remaining)
+          }
+        } catch (err) {
+          console.error('Complete error:', err)
+        }
+
+        setAnimating(false)
+      }
+    }, 1000)
   }
 
-  const formatBalance = (bal: string) => {
-    const num = parseFloat(bal)
-    if (num >= 10) return num.toFixed(2)
-    return num.toFixed(8)
+  const startCooldownTimer = (seconds: number) => {
+    let remaining = seconds
+    if (cooldownRef.current) clearInterval(cooldownRef.current)
+
+    cooldownRef.current = setInterval(() => {
+      remaining -= 1
+      setCooldownSeconds(remaining)
+
+      if (remaining <= 0) {
+        if (cooldownRef.current) clearInterval(cooldownRef.current)
+        setStatus('idle')
+        setCooldownSeconds(0)
+      }
+    }, 1000)
   }
 
-  // Calculate progress toward minimum withdrawal
-  const balanceNum = status ? parseFloat(status.balance) : 0
-  const progress = Math.min((balanceNum / 10) * 100, 100)
+  const withdrawalMinimum = 10
+  const progressPercent = Math.min(
+    (parseFloat(animating ? animatedBalance : balance) / withdrawalMinimum) * 100,
+    100
+  )
 
-  if (loading) {
-    return (
-      <div style={{
-        maxWidth: '480px',
-        margin: '0 auto',
-        padding: '30px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '400px',
-      }}>
-        <div style={{
-          fontFamily: 'Barlow Condensed, sans-serif',
-          fontSize: '14px',
-          color: '#4a5568',
-          letterSpacing: '3px',
-        }}>
-          CHARGEMENT...
-        </div>
-      </div>
-    )
-  }
-
-  const isMining = !!status?.activeSession
-  const isOnCooldown = !status?.canMine && !status?.activeSession
+  const canWithdraw = parseFloat(balance) >= withdrawalMinimum
 
   return (
     <div style={{
@@ -183,64 +206,41 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
       flexDirection: 'column',
       alignItems: 'center',
       gap: '24px',
+      position: 'relative',
     }}>
 
-      {/* BALANCE CARD */}
-      <div style={{
-        width: '100%',
-        background: 'linear-gradient(135deg, #12151e 0%, #0a2035 100%)',
-        border: '1px solid rgba(255,255,255,0.06)',
-        borderRadius: '20px',
-        padding: '32px',
-        textAlign: 'center',
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        {/* Mining complete flash */}
-        {miningComplete && (
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'rgba(232,25,44,0.3)',
-            animation: 'flash 0.5s ease',
-            pointerEvents: 'none',
-          }} />
-        )}
+      {/* AD OVERLAY */}
+      {showAd && (
+        <AdOverlay adType={adType} onComplete={handleAdComplete} />
+      )}
+
+      {/* REWARD FLOAT */}
+      {rewardFloat && (
         <div style={{
-          fontSize: '11px',
-          letterSpacing: '3px',
-          color: '#4a5568',
-          textTransform: 'uppercase',
-          marginBottom: '8px',
-          fontFamily: 'Barlow Condensed, sans-serif',
-          fontWeight: 600,
-        }}>
-          Solde actuel
-        </div>
-        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
           fontFamily: 'Bebas Neue, sans-serif',
-          fontSize: '32px',
-          fontWeight: 900,
-          color: miningComplete ? '#16a34a' : '#e8192c',
-          lineHeight: 1,
-          textShadow: miningComplete 
-            ? '0 0 30px rgba(22,163,74,0.4)' 
-            : '0 0 30px rgba(232,25,44,0.4)',
-          letterSpacing: '2px',
-          transition: 'all 0.3s',
-        }}>
-          {miningComplete ? 'MINAGE TERMINÉ !' : formatBalance(status?.balance || '0')}
-        </div>
-        <div style={{
-          fontFamily: 'Barlow Condensed, sans-serif',
-          fontSize: '14px',
-          color: '#4a5568',
-          marginTop: '6px',
+          fontSize: '28px',
+          fontWeight: 700,
+          color: '#16a34a',
+          textShadow: '0 0 20px rgba(22,163,74,0.6)',
+          pointerEvents: 'none',
+          zIndex: 999,
+          animation: 'floatUp 2s ease-out forwards',
           letterSpacing: '3px',
         }}>
-          {miningComplete ? `+${status?.miningReward} REBEL` : 'REBEL'}
+          +{miningReward.toFixed(8)} RBL
         </div>
-      </div>
+      )}
+
+      {/* BALANCE CARD */}
+      <BalanceCard
+        balance={balance}
+        animating={animating}
+        animatedBalance={animatedBalance}
+      />
 
       {/* PROGRESS BAR */}
       <div style={{ width: '100%' }}>
@@ -254,7 +254,9 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
           fontFamily: 'Barlow Condensed, sans-serif',
         }}>
           <span>Progression retrait</span>
-          <span>{formatBalance(status?.balance || '0')} / 10 RBL</span>
+          <span>
+            {(animating ? animatedBalance : balance)} / {withdrawalMinimum} RBL
+          </span>
         </div>
         <div style={{
           width: '100%',
@@ -266,158 +268,40 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
         }}>
           <div style={{
             height: '100%',
-            width: `${progress}%`,
-            background: progress >= 100 
-              ? 'linear-gradient(90deg, #16a34a, #22c55e)' 
-              : 'linear-gradient(90deg, #e8192c, #ff3347)',
+            width: `${progressPercent}%`,
+            background: 'linear-gradient(90deg, #e8192c, #ff3347)',
             borderRadius: '4px',
-            boxShadow: progress >= 100 
-              ? '0 0 10px #16a34a' 
-              : '0 0 10px #e8192c',
+            boxShadow: '0 0 10px #e8192c',
             transition: 'width 0.6s ease',
           }} />
         </div>
       </div>
 
-      {/* MINE BUTTON */}
+      {/* TOKEN NOTICE */}
       <div style={{
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '220px',
-        width: '220px',
+        width: '100%',
+        padding: '10px 16px',
+        background: 'rgba(26,111,255,0.06)',
+        border: '1px solid rgba(26,111,255,0.12)',
+        borderRadius: '10px',
+        fontFamily: 'Barlow Condensed, sans-serif',
+        fontSize: '12px',
+        color: '#4a5568',
+        letterSpacing: '0.5px',
+        textAlign: 'center',
+        lineHeight: '1.6',
       }}>
-        {/* Orbit ring */}
-        <div style={{
-          position: 'absolute',
-          width: '200px',
-          height: '200px',
-          borderRadius: '50%',
-          border: '1px dashed rgba(232,25,44,0.2)',
-          animation: isMining ? 'spin 8s linear infinite' : 'none',
-        }} />
-
-        {/* Progress ring for mining */}
-        {isMining && (
-          <svg style={{
-            position: 'absolute',
-            width: '200px',
-            height: '200px',
-            transform: 'rotate(-90deg)',
-          }}>
-            <circle
-              cx="100"
-              cy="100"
-              r="90"
-              fill="none"
-              stroke="rgba(232,25,44,0.1)"
-              strokeWidth="4"
-            />
-            <circle
-              cx="100"
-              cy="100"
-              r="90"
-              fill="none"
-              stroke="#e8192c"
-              strokeWidth="4"
-              strokeLinecap="round"
-              strokeDasharray={`${(elapsedSeconds / 300) * 565} 565`}
-              style={{ transition: 'stroke-dasharray 0.5s' }}
-            />
-          </svg>
-        )}
-
-        {/* Main button */}
-        <button
-          onClick={startMining}
-          disabled={isMining || isOnCooldown}
-          style={{
-            width: '150px',
-            height: '150px',
-            borderRadius: '50%',
-            border: `2px solid ${isMining ? '#16a34a' : isOnCooldown ? '#4a5568' : '#e8192c'}`,
-            cursor: isMining || isOnCooldown ? 'default' : 'pointer',
-            background: isMining 
-              ? 'radial-gradient(circle at 35% 35%, #052e16, #080a0f)'
-              : isOnCooldown
-                ? 'radial-gradient(circle at 35% 35%, #1a202c, #080a0f)'
-                : 'radial-gradient(circle at 35% 35%, #2a0508, #080a0f)',
-            boxShadow: isMining 
-              ? '0 0 0 6px rgba(22,163,74,0.05), 0 0 40px rgba(22,163,74,0.2)'
-              : isOnCooldown
-                ? 'none'
-                : '0 0 0 6px rgba(232,25,44,0.05), 0 0 40px rgba(232,25,44,0.2)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            position: 'relative',
-            zIndex: 2,
-            transition: 'all 0.15s',
-          }}
-        >
-          {isMining ? (
-            <>
-              <span style={{ fontSize: '32px' }}>⏳</span>
-              <span style={{
-                fontFamily: 'Bebas Neue, sans-serif',
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '2px',
-                color: '#16a34a',
-              }}>
-                {formatTime(elapsedSeconds)}
-              </span>
-            </>
-          ) : isOnCooldown ? (
-            <>
-              <span style={{ fontSize: '32px' }}>🔒</span>
-              <span style={{
-                fontFamily: 'Bebas Neue, sans-serif',
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '2px',
-                color: '#4a5568',
-              }}>
-                {formatTime(status?.cooldownRemainingSeconds || 0)}
-              </span>
-            </>
-          ) : (
-            <>
-              <span style={{ fontSize: '36px' }}>⛏️</span>
-              <span style={{
-                fontFamily: 'Bebas Neue, sans-serif',
-                fontSize: '13px',
-                fontWeight: 700,
-                letterSpacing: '3px',
-                color: '#e8192c',
-              }}>
-                MINER
-              </span>
-            </>
-          )}
-        </button>
+        ℹ️ Token REBEL non lancé · Prix actuel :
+        <strong style={{ color: '#e8192c' }}> 0.002$</strong> par REBEL ·
+        Retraits via FaucetPay & USDT TRC20
       </div>
 
-      {/* ERROR MESSAGE */}
-      {error && (
-        <div style={{
-          background: 'rgba(232,25,44,0.1)',
-          border: '1px solid rgba(232,25,44,0.3)',
-          borderRadius: '10px',
-          padding: '12px 16px',
-          color: '#ff3347',
-          fontFamily: 'Barlow Condensed, sans-serif',
-          fontSize: '13px',
-          letterSpacing: '0.5px',
-          width: '100%',
-          textAlign: 'center',
-        }}>
-          ⚠️ {error}
-        </div>
-      )}
+      {/* MINE BUTTON */}
+      <MineButton
+        status={status}
+        cooldownSeconds={cooldownSeconds}
+        onClick={handleMineClick}
+      />
 
       {/* STATS ROW */}
       <div style={{
@@ -427,8 +311,8 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
         gap: '12px',
       }}>
         {[
-          { value: status?.totalMiningCount?.toString() || '0', label: 'Total minages' },
-          { value: formatBalance(status?.todayEarned || '0'), label: "Aujourd'hui (RBL)" },
+          { value: totalMiningCount.toString(), label: 'Total minages' },
+          { value: todayEarned, label: "Aujourd'hui (RBL)" },
         ].map((stat) => (
           <div key={stat.label} style={{
             background: '#12151e',
@@ -439,7 +323,7 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
           }}>
             <div style={{
               fontFamily: 'Bebas Neue, sans-serif',
-              fontSize: '20px',
+              fontSize: '18px',
               fontWeight: 700,
               color: '#e8192c',
               letterSpacing: '1px',
@@ -462,29 +346,33 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
 
       {/* WITHDRAW BUTTON */}
       <button
-        disabled={!status || balanceNum < 10}
+        onClick={canWithdraw ? () => alert('Page de retrait — Sprint 5') : undefined}
         style={{
           width: '100%',
           padding: '16px',
           borderRadius: '14px',
-          border: '1px solid rgba(255,255,255,0.06)',
-          background: balanceNum >= 10 
-            ? 'linear-gradient(135deg, #e8192c, #cc1526)'
+          border: `1px solid ${canWithdraw
+            ? '#16a34a'
+            : 'rgba(255,255,255,0.06)'}`,
+          background: canWithdraw
+            ? 'rgba(22,163,74,0.08)'
             : 'transparent',
-          color: balanceNum >= 10 ? '#ffffff' : '#4a5568',
-          cursor: balanceNum >= 10 ? 'pointer' : 'not-allowed',
+          color: canWithdraw ? '#16a34a' : '#4a5568',
+          cursor: canWithdraw ? 'pointer' : 'not-allowed',
           fontFamily: 'Bebas Neue, sans-serif',
           fontSize: '13px',
           fontWeight: 700,
           letterSpacing: '3px',
           textTransform: 'uppercase',
-          boxShadow: balanceNum >= 10 ? '0 4px 20px rgba(232,25,44,0.3)' : 'none',
-          transition: 'all 0.2s',
+          transition: 'all 0.3s',
+          boxShadow: canWithdraw
+            ? '0 0 20px rgba(22,163,74,0.15)'
+            : 'none',
         }}
       >
-        {balanceNum >= 10 
-          ? '💰 RETIRER MES REBEL' 
-          : `🔒 RETRAIT — MIN. 10 REBEL (${balanceNum.toFixed(2)}/10)`}
+        {canWithdraw
+          ? '✅ RETRAIT DISPONIBLE'
+          : `🔒 RETRAIT — MIN. ${withdrawalMinimum} REBEL`}
       </button>
 
     </div>

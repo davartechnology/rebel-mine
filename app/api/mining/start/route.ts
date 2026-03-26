@@ -13,27 +13,50 @@ export async function POST(req: NextRequest) {
 
     const userId = session.user.id
 
-    // Vérifier qu'aucune session active n'existe
+    // Nettoyer automatiquement les sessions bloquées
+    // Une session pending depuis plus de 2 minutes est considérée bloquée
+    // Une session mining depuis plus de 310 secondes est considérée bloquée
+    await query(
+      `UPDATE mining_sessions
+       SET status = 'cancelled'
+       WHERE user_id = $1
+       AND (
+         (status = 'pending' AND started_at < NOW() - INTERVAL '2 minutes')
+         OR
+         (status = 'mining' AND started_at < NOW() - INTERVAL '310 seconds')
+       )`,
+      [userId]
+    )
+
+    // Vérifier s'il reste une session vraiment active
     const activeCheck = await query(
-      `SELECT id FROM mining_sessions
+      `SELECT id, status, started_at FROM mining_sessions
        WHERE user_id = $1
        AND status IN ('pending', 'mining')`,
       [userId]
     )
 
     if (activeCheck.rows.length > 0) {
+      const active = activeCheck.rows[0]
+      const startedAt = new Date(active.started_at)
+      const elapsedSeconds = (Date.now() - startedAt.getTime()) / 1000
+
       return NextResponse.json(
-        { error: 'Une session de minage est déjà en cours' },
+        {
+          error: 'Une session de minage est déjà en cours',
+          sessionId: active.id,
+          elapsedSeconds: Math.floor(elapsedSeconds),
+        },
         { status: 400 }
       )
     }
 
     // Vérifier le cooldown
     const lastSession = await query(
-      `SELECT cooldown_until FROM mining_sessions
-       WHERE user_id = $1
-       AND status = 'completed'
-       ORDER BY completed_at DESC LIMIT 1`,
+      `SELECT cooldown_until from mining_sessions
+       where user_id = $1
+       and status = 'completed'
+       order by completed_at desc limit 1`,
       [userId]
     )
 
@@ -59,8 +82,8 @@ export async function POST(req: NextRequest) {
     // Créer la session de minage
     const newSession = await query(
       `INSERT INTO mining_sessions
-        (user_id, ad_type, ad_token, status)
-       VALUES ($1, $2, $3, 'pending')
+        (user_id, ad_type, ad_token, status, started_at)
+       VALUES ($1, $2, $3, 'pending', NOW())
        RETURNING id, ad_type`,
       [userId, adType, adToken]
     )
