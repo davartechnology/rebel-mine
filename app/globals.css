@@ -84,3 +84,24 @@ body::before {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+
+/* PWA Mobile optimizations */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+input, button, select, textarea {
+  -webkit-appearance: none;
+  border-radius: 0;
+}
+
+/* Safe area for notch phones */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Smooth scrolling */
+* {
+  -webkit-overflow-scrolling: touch;
+}

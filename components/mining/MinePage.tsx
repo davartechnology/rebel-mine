@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import AdOverlay from './AdOverlay'
 import MineButton from './MineButton'
 import BalanceCard from './BalanceCard'
+import WithdrawModal from './WithdrawModal'
 
 interface MinePageProps {
   userId: string
@@ -25,6 +26,8 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
   const [miningReward, setMiningReward] = useState(1.0)
   const [animationSeconds, setAnimationSeconds] = useState(300)
   const [rewardFloat, setRewardFloat] = useState(false)
+  const [showWithdraw, setShowWithdraw] = useState(false)
+  const [withdrawalCount, setWithdrawalCount] = useState(0)
   const animationRef = useRef<NodeJS.Timeout | null>(null)
   const cooldownRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -47,6 +50,12 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
       setTodayEarned(data.todayEarned || '0.00000000')
       setMiningReward(data.miningReward || 1.0)
       setAnimationSeconds(data.animationSeconds || 300)
+
+      const profileRes = await fetch('/api/user/profile')
+      const profileData = await profileRes.json()
+      if (profileData.withdrawalCount !== undefined) {
+        setWithdrawalCount(profileData.withdrawalCount)
+      }
 
       if (data.activeSession) {
         setStatus('mining')
@@ -346,7 +355,7 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
 
       {/* WITHDRAW BUTTON */}
       <button
-        onClick={canWithdraw ? () => alert('Page de retrait — Sprint 5') : undefined}
+        onClick={() => canWithdraw && setShowWithdraw(true)}
         style={{
           width: '100%',
           padding: '16px',
@@ -374,6 +383,20 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
           ? '✅ RETRAIT DISPONIBLE'
           : `🔒 RETRAIT — MIN. ${withdrawalMinimum} REBEL`}
       </button>
+
+      {/* WITHDRAW MODAL */}
+      {showWithdraw && (
+        <WithdrawModal
+          balance={balance}
+          withdrawalCount={withdrawalCount}
+          onClose={() => setShowWithdraw(false)}
+          onSuccess={() => {
+            fetchStatus()
+            onBalanceUpdate()
+            setShowWithdraw(false)
+          }}
+        />
+      )}
 
     </div>
   )

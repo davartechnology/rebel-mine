@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/layout/Navbar'
+import AdBanner from '@/components/layout/AdBanner'
 import MinePage from '@/components/mining/MinePage'
 import ReferralPage from '@/components/layout/ReferralPage'
 import HistoryPage from '@/components/layout/HistoryPage'
@@ -13,6 +14,7 @@ export default function Home() {
   const router = useRouter()
   const [activePage, setActivePage] = useState<'mine' | 'referral' | 'history'>('mine')
   const [balance, setBalance] = useState('0.00000000')
+  const [showBanner, setShowBanner] = useState(true)
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -82,7 +84,8 @@ export default function Home() {
         balance={balance}
       />
       <main style={{
-        paddingTop: '80px',
+        paddingTop: '64px',
+        paddingBottom: '144px',
         minHeight: '100vh',
         position: 'relative',
         zIndex: 1,
@@ -100,6 +103,7 @@ export default function Home() {
           <HistoryPage userId={session.user.id} />
         )}
       </main>
+      <AdBanner hidden={!showBanner} />
     </>
   )
 }
