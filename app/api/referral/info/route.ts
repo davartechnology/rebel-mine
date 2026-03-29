@@ -24,9 +24,12 @@ export async function GET(req: NextRequest) {
 
     // Nombre de filleuls
     const refCount = await query(
-      'SELECT COUNT(*) FROM referrals WHERE referrer_id = $1',
+      `SELECT COUNT(*) FROM referrals
+       WHERE referrer_id = $1`,
       [userId]
     )
+
+    const referralCount = parseInt(refCount.rows[0].count)
 
     // Gains totaux de parrainage
     const earnings = await query(
@@ -42,19 +45,24 @@ export async function GET(req: NextRequest) {
 
     // Liste des filleuls
     const referrals = await query(
-      `SELECT u.username, r.total_earned, r.created_at,
-              b.total_mining_count
-       FROM referrals r
-       JOIN users u ON u.id = r.referred_id
-       LEFT JOIN balances b ON b.user_id = r.referred_id
-       WHERE r.referrer_id = $1
-       ORDER BY r.created_at DESC
-       LIMIT 50`,
+      `SELECT
+        u.username,
+        u.email,
+        COALESCE(r.total_earned, 0) as total_earned,
+        r.created_at,
+        COALESCE(b.total_mining_count, 0) as total_mining_count,
+        COALESCE(b.frz_balance, 0) as frz_balance
+      FROM referrals r
+      JOIN users u ON u.id = r.referred_id
+      LEFT JOIN balances b ON b.user_id = r.referred_id
+      WHERE r.referrer_id = $1
+      ORDER BY r.created_at DESC
+      LIMIT 50`,
       [userId]
     )
 
     const e = earnings.rows[0]
-    const count = parseInt(refCount.rows[0].count)
+    const count = referralCount
 
     // Calculer le tier
     let tier = 'bronze'
@@ -78,10 +86,13 @@ export async function GET(req: NextRequest) {
       referrals: referrals.rows.map((r: any) => ({
         username: r.username
           ? r.username.substring(0, 4) + '****'
-          : 'User****',
+          : r.email
+            ? r.email.substring(0, 3) + '****'
+            : 'User****',
         earned: parseFloat(r.total_earned).toFixed(8),
         joinedAt: r.created_at,
-        miningCount: r.total_mining_count || 0,
+        miningCount: parseInt(r.total_mining_count) || 0,
+        balance: parseFloat(r.frz_balance).toFixed(8),
       })),
     })
 

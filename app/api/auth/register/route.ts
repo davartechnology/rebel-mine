@@ -101,32 +101,92 @@ export async function POST(req: NextRequest) {
     await query(
       `INSERT INTO transactions
         (user_id, type, amount, description)
-       VALUES ($1, 'bonus', 0.5, 'Bonus d\'inscription')`,
-      [userId]
+       VALUES ($1, $2, $3, $4)`,
+      [userId, 'bonus', 0.5, 'Bonus inscription']
     )
 
     // Enregistrer le parrainage
     if (referrerId) {
-      await query(
-        `INSERT INTO referrals (referrer_id, referred_id, level)
-         VALUES ($1, $2, 1)`,
-        [referrerId, userId]
-      )
-
-      // Mettre à jour le tier du parrain
-      const refCount = await query(
-        'SELECT COUNT(*) FROM referrals WHERE referrer_id = $1',
+      // Vérifier que le parrain existe vraiment
+      const referrerCheck = await query(
+        'SELECT id FROM users WHERE id = $1',
         [referrerId]
       )
-      const count = parseInt(refCount.rows[0].count)
-      let tier = 'bronze'
-      if (count >= 15) tier = 'gold'
-      else if (count >= 5) tier = 'silver'
 
-      await query(
-        'UPDATE users SET tier = $1 WHERE id = $2',
-        [tier, referrerId]
-      )
+      if (referrerCheck.rows.length > 0) {
+        // Insérer dans referrals niveau 1
+        const existingRef = await query(
+          'SELECT id FROM referrals WHERE referred_id = $1 AND level = 1',
+          [userId]
+        )
+        if (existingRef.rows.length === 0) {
+          await query(
+            `INSERT INTO referrals
+              (referrer_id, referred_id, level, total_earned)
+             VALUES ($1, $2, 1, 0)`,
+            [referrerId, userId]
+          )
+        }
+
+        // Trouver parrain N2 et N3 et les enregistrer aussi
+        const referrerUser = await query(
+          'SELECT referred_by FROM users WHERE id = $1',
+          [referrerId]
+        )
+
+        if (referrerUser.rows[0]?.referred_by) {
+          const referrerId2 = referrerUser.rows[0].referred_by
+          const existingRef2 = await query(
+            'SELECT id FROM referrals WHERE referred_id = $1 AND level = 2',
+            [userId]
+          )
+          if (existingRef2.rows.length === 0) {
+            await query(
+              `INSERT INTO referrals
+                (referrer_id, referred_id, level, total_earned)
+               VALUES ($1, $2, 2, 0)`,
+              [referrerId2, userId]
+            )
+          }
+
+          const referrerUser2 = await query(
+            'SELECT referred_by FROM users WHERE id = $1',
+            [referrerId2]
+          )
+
+          if (referrerUser2.rows[0]?.referred_by) {
+            const referrerId3 = referrerUser2.rows[0].referred_by
+            const existingRef3 = await query(
+              'SELECT id FROM referrals WHERE referred_id = $1 AND level = 3',
+              [userId]
+            )
+            if (existingRef3.rows.length === 0) {
+              await query(
+                `INSERT INTO referrals
+                  (referrer_id, referred_id, level, total_earned)
+                 VALUES ($1, $2, 3, 0)`,
+                [referrerId3, userId]
+              )
+            }
+          }
+        }
+
+        // Mettre à jour le tier du parrain N1
+        const refCount = await query(
+          `SELECT COUNT(*) FROM referrals
+           WHERE referrer_id = $1 AND level = 1`,
+          [referrerId]
+        )
+        const count = parseInt(refCount.rows[0].count)
+        let tier = 'bronze'
+        if (count >= 15) tier = 'gold'
+        else if (count >= 5) tier = 'silver'
+
+        await query(
+          'UPDATE users SET tier = $1 WHERE id = $2',
+          [tier, referrerId]
+        )
+      }
     }
 
     return NextResponse.json({

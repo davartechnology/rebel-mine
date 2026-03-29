@@ -28,6 +28,7 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
   const [rewardFloat, setRewardFloat] = useState(false)
   const [showWithdraw, setShowWithdraw] = useState(false)
   const [withdrawalCount, setWithdrawalCount] = useState(0)
+  const [reservedBalance, setReservedBalance] = useState('0.00000000')
   const animationRef = useRef<NodeJS.Timeout | null>(null)
   const cooldownRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -55,6 +56,12 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
       const profileData = await profileRes.json()
       if (profileData.withdrawalCount !== undefined) {
         setWithdrawalCount(profileData.withdrawalCount)
+      }
+
+      if (profileData.balance?.reserved) {
+        setReservedBalance(
+          parseFloat(profileData.balance.reserved).toFixed(8)
+        )
       }
 
       if (data.activeSession) {
@@ -285,6 +292,61 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
           }} />
         </div>
       </div>
+
+      {/* RESERVED TOKEN */}
+      {parseFloat(reservedBalance) > 0 && (
+        <div style={{
+          width: '100%',
+          background: 'rgba(26,111,255,0.06)',
+          border: '1px solid rgba(26,111,255,0.15)',
+          borderRadius: '14px',
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div>
+            <div style={{
+              fontFamily: 'Barlow Condensed, sans-serif',
+              fontSize: '11px',
+              fontWeight: 600,
+              letterSpacing: '2px',
+              textTransform: 'uppercase',
+              color: '#4a5568',
+              marginBottom: '4px',
+            }}>
+              🔒 Réserve Token
+            </div>
+            <div style={{
+              fontFamily: 'Barlow Condensed, sans-serif',
+              fontSize: '12px',
+              color: '#4a5568',
+              letterSpacing: '0.5px',
+              lineHeight: '1.5',
+            }}>
+              Transféré au lancement blockchain
+            </div>
+          </div>
+          <div style={{
+            fontFamily: 'Bebas Neue, sans-serif',
+            fontSize: '18px',
+            color: '#1a6fff',
+            letterSpacing: '1px',
+            textAlign: 'right',
+          }}>
+            {reservedBalance}
+            <div style={{
+              fontSize: '10px',
+              color: '#4a5568',
+              letterSpacing: '1px',
+              fontFamily: 'Barlow Condensed, sans-serif',
+            }}>
+              REBEL
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* TOKEN NOTICE */}
       <div style={{
