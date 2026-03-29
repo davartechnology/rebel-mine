@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import AdOverlay from './AdOverlay'
 import MineButton from './MineButton'
 import BalanceCard from './BalanceCard'
@@ -8,80 +8,59 @@ import WithdrawModal from './WithdrawModal'
 
 interface MinePageProps {
   userId: string
+  balance: string
+  miningStatus: 'idle' | 'mining' | 'cooldown'
+  cooldownSeconds: number
+  totalMiningCount: number
+  todayEarned: string
+  miningReward: number
+  animationSeconds: number
+  withdrawalCount: number
+  reservedBalance: string
+  sessionId: string
+  onMiningStart: (sid: string, adToken: string, adType: string) => void
+  onMiningComplete: () => void
+  onStatusChange: (status: 'idle' | 'mining' | 'cooldown') => void
+  onCooldownStart: (seconds: number) => void
+  onMiningTimerStart: (duration: number, sid: string, startBalance: number, reward: number) => void
   onBalanceUpdate: () => void
 }
 
-export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
-  const [status, setStatus] = useState<'idle' | 'mining' | 'cooldown'>('idle')
-  const [balance, setBalance] = useState('0.00000000')
-  const [animatedBalance, setAnimatedBalance] = useState('0.00000000')
-  const [animating, setAnimating] = useState(false)
-  const [cooldownSeconds, setCooldownSeconds] = useState(0)
-  const [totalMiningCount, setTotalMiningCount] = useState(0)
-  const [todayEarned, setTodayEarned] = useState('0.00000000')
+export default function MinePage({
+  userId,
+  balance,
+  miningStatus,
+  cooldownSeconds,
+  totalMiningCount,
+  todayEarned,
+  miningReward,
+  animationSeconds,
+  withdrawalCount,
+  reservedBalance,
+  sessionId,
+  onMiningStart,
+  onMiningComplete,
+  onStatusChange,
+  onCooldownStart,
+  onMiningTimerStart,
+  onBalanceUpdate,
+}: MinePageProps) {
   const [showAd, setShowAd] = useState(false)
   const [adType, setAdType] = useState<'video_reward' | 'interstitial'>('video_reward')
-  const [sessionId, setSessionId] = useState('')
-  const [adToken, setAdToken] = useState('')
-  const [miningReward, setMiningReward] = useState(1.0)
-  const [animationSeconds, setAnimationSeconds] = useState(300)
-  const [rewardFloat, setRewardFloat] = useState(false)
+  const [currentAdToken, setCurrentAdToken] = useState('')
+  const [currentSessionId, setCurrentSessionId] = useState('')
   const [showWithdraw, setShowWithdraw] = useState(false)
-  const [withdrawalCount, setWithdrawalCount] = useState(0)
-  const [reservedBalance, setReservedBalance] = useState('0.00000000')
-  const animationRef = useRef<NodeJS.Timeout | null>(null)
-  const cooldownRef = useRef<NodeJS.Timeout | null>(null)
+  const [rewardFloat, setRewardFloat] = useState(false)
 
-  useEffect(() => {
-    fetchStatus()
-    return () => {
-      if (animationRef.current) clearInterval(animationRef.current)
-      if (cooldownRef.current) clearInterval(cooldownRef.current)
-    }
-  }, [])
-
-  const fetchStatus = async () => {
-    try {
-      const res = await fetch('/api/mining/status')
-      const data = await res.json()
-
-      setBalance(data.balance || '0.00000000')
-      setAnimatedBalance(data.balance || '0.00000000')
-      setTotalMiningCount(data.totalMiningCount || 0)
-      setTodayEarned(data.todayEarned || '0.00000000')
-      setMiningReward(data.miningReward || 1.0)
-      setAnimationSeconds(data.animationSeconds || 300)
-
-      const profileRes = await fetch('/api/user/profile')
-      const profileData = await profileRes.json()
-      if (profileData.withdrawalCount !== undefined) {
-        setWithdrawalCount(profileData.withdrawalCount)
-      }
-
-      if (profileData.balance?.reserved) {
-        setReservedBalance(
-          parseFloat(profileData.balance.reserved).toFixed(8)
-        )
-      }
-
-      if (data.activeSession) {
-        setStatus('mining')
-        setSessionId(data.activeSession.id)
-        const elapsed = (Date.now() - new Date(data.activeSession.startedAt).getTime()) / 1000
-        const remaining = Math.max(0, data.animationSeconds - elapsed)
-        startMiningAnimation(parseFloat(data.balance), data.miningReward, remaining, data.activeSession.id)
-      } else if (!data.canMine && data.cooldownRemainingSeconds > 0) {
-        setStatus('cooldown')
-        setCooldownSeconds(data.cooldownRemainingSeconds)
-        startCooldownTimer(data.cooldownRemainingSeconds)
-      }
-    } catch (err) {
-      console.error('Status error:', err)
-    }
-  }
+  const withdrawalMinimum = 10
+  const progressPercent = Math.min(
+    (parseFloat(balance) / withdrawalMinimum) * 100,
+    100
+  )
+  const canWithdraw = parseFloat(balance) >= withdrawalMinimum
 
   const handleMineClick = async () => {
-    if (status !== 'idle') return
+    if (miningStatus !== 'idle') return
 
     try {
       const res = await fetch('/api/mining/start', { method: 'POST' })
@@ -92,10 +71,11 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
         return
       }
 
-      setSessionId(data.sessionId)
-      setAdToken(data.adToken)
+      setCurrentSessionId(data.sessionId)
+      setCurrentAdToken(data.adToken)
       setAdType(data.adType)
       setShowAd(true)
+      onMiningStart(data.sessionId, data.adToken, data.adType)
     } catch (err) {
       console.error('Mine start error:', err)
     }
@@ -108,7 +88,10 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
       const res = await fetch('/api/mining/verify-ad', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, adToken }),
+        body: JSON.stringify({
+          sessionId: currentSessionId,
+          adToken: currentAdToken,
+        }),
       })
 
       const data = await res.json()
@@ -118,100 +101,19 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
         return
       }
 
-      setStatus('mining')
-      startMiningAnimation(
-        parseFloat(balance),
-        miningReward,
+      onStatusChange('mining')
+      onMiningTimerStart(
         animationSeconds,
-        sessionId
+        currentSessionId,
+        parseFloat(balance),
+        miningReward
       )
+
+      setRewardFloat(false)
     } catch (err) {
       console.error('Ad verify error:', err)
     }
   }
-
-  const startMiningAnimation = (
-    startBalance: number,
-    reward: number,
-    duration: number,
-    sid: string
-  ) => {
-    const startTime = Date.now()
-    const endBalance = startBalance + reward
-
-    if (animationRef.current) clearInterval(animationRef.current)
-
-    animationRef.current = setInterval(async () => {
-      const elapsed = (Date.now() - startTime) / 1000
-      const progress = Math.min(elapsed / duration, 1)
-      const current = startBalance + (reward * progress)
-
-      setAnimatedBalance(current.toFixed(8))
-      setAnimating(true)
-
-      if (progress >= 1) {
-        if (animationRef.current) clearInterval(animationRef.current)
-
-        try {
-          const res = await fetch('/api/mining/complete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: sid }),
-          })
-
-          const data = await res.json()
-
-          if (res.ok) {
-            setBalance(data.newBalance)
-            setAnimatedBalance(data.newBalance)
-            setTotalMiningCount(prev => prev + 1)
-            setTodayEarned(prev =>
-              (parseFloat(prev) + data.reward).toFixed(8)
-            )
-            onBalanceUpdate()
-            setRewardFloat(true)
-            setTimeout(() => setRewardFloat(false), 2000)
-
-            const cooldownRes = await fetch('/api/mining/status')
-            const cooldownData = await cooldownRes.json()
-            const remaining = cooldownData.cooldownRemainingSeconds || 1200
-
-            setStatus('cooldown')
-            setCooldownSeconds(remaining)
-            startCooldownTimer(remaining)
-          }
-        } catch (err) {
-          console.error('Complete error:', err)
-        }
-
-        setAnimating(false)
-      }
-    }, 1000)
-  }
-
-  const startCooldownTimer = (seconds: number) => {
-    let remaining = seconds
-    if (cooldownRef.current) clearInterval(cooldownRef.current)
-
-    cooldownRef.current = setInterval(() => {
-      remaining -= 1
-      setCooldownSeconds(remaining)
-
-      if (remaining <= 0) {
-        if (cooldownRef.current) clearInterval(cooldownRef.current)
-        setStatus('idle')
-        setCooldownSeconds(0)
-      }
-    }, 1000)
-  }
-
-  const withdrawalMinimum = 10
-  const progressPercent = Math.min(
-    (parseFloat(animating ? animatedBalance : balance) / withdrawalMinimum) * 100,
-    100
-  )
-
-  const canWithdraw = parseFloat(balance) >= withdrawalMinimum
 
   return (
     <div style={{
@@ -225,12 +127,10 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
       position: 'relative',
     }}>
 
-      {/* AD OVERLAY */}
       {showAd && (
         <AdOverlay adType={adType} onComplete={handleAdComplete} />
       )}
 
-      {/* REWARD FLOAT */}
       {rewardFloat && (
         <div style={{
           position: 'fixed',
@@ -251,11 +151,10 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
         </div>
       )}
 
-      {/* BALANCE CARD */}
       <BalanceCard
         balance={balance}
-        animating={animating}
-        animatedBalance={animatedBalance}
+        animating={miningStatus === 'mining'}
+        animatedBalance={balance}
       />
 
       {/* PROGRESS BAR */}
@@ -270,9 +169,7 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
           fontFamily: 'Barlow Condensed, sans-serif',
         }}>
           <span>Progression retrait</span>
-          <span>
-            {(animating ? animatedBalance : balance)} / {withdrawalMinimum} RBL
-          </span>
+          <span>{balance} / {withdrawalMinimum} RBL</span>
         </div>
         <div style={{
           width: '100%',
@@ -293,7 +190,7 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
         </div>
       </div>
 
-      {/* RESERVED TOKEN */}
+      {/* RESERVED BALANCE */}
       {parseFloat(reservedBalance) > 0 && (
         <div style={{
           width: '100%',
@@ -322,7 +219,6 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
               fontSize: '12px',
               color: '#4a5568',
               letterSpacing: '0.5px',
-              lineHeight: '1.5',
             }}>
               Transféré au lancement blockchain
             </div>
@@ -347,7 +243,6 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
         </div>
       )}
 
-
       {/* TOKEN NOTICE */}
       <div style={{
         width: '100%',
@@ -367,9 +262,8 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
         Retraits via FaucetPay & USDT TRC20
       </div>
 
-      {/* MINE BUTTON */}
       <MineButton
-        status={status}
+        status={miningStatus}
         cooldownSeconds={cooldownSeconds}
         onClick={handleMineClick}
       />
@@ -446,15 +340,14 @@ export default function MinePage({ userId, onBalanceUpdate }: MinePageProps) {
           : `🔒 RETRAIT — MIN. ${withdrawalMinimum} REBEL`}
       </button>
 
-      {/* WITHDRAW MODAL */}
       {showWithdraw && (
         <WithdrawModal
           balance={balance}
           withdrawalCount={withdrawalCount}
           onClose={() => setShowWithdraw(false)}
           onSuccess={() => {
-            fetchStatus()
             onBalanceUpdate()
+            onMiningComplete()
             setShowWithdraw(false)
           }}
         />
