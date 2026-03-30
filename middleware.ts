@@ -5,7 +5,7 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   
   // Pages publiques — toujours accessibles
-  const publicPaths = ['/login', '/register', '/api/auth', '/_next', '/favicon.ico', '/public']
+  const publicPaths = ['/login', '/register', '/api/auth', '/_next', '/favicon.ico', '/public', '/manifest.json', '/icon.svg', '/icon-192.png', '/icon-512.png']
   const isPublic = publicPaths.some(path => pathname.startsWith(path))
   
   if (isPublic) {
@@ -30,6 +30,6 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|public).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|icon.svg|icon-192.png|icon-512.png|public|api/auth).*)',
   ],
 }

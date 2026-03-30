@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="100"
+        fill="#080a0f"/>
+
+  <!-- Border -->
+  <rect x="8" y="8" width="496" height="496"
+        rx="95" fill="none"
+        stroke="#e8192c" stroke-width="8"/>
+
+  <!-- R Letter -->
+  <rect x="140" y="120" width="50"
+        height="272" rx="8" fill="#e8192c"/>
+  <rect x="140" y="120" width="180"
+        height="50" rx="8" fill="#e8192c"/>
+  <rect x="140" y="230" width="160"
+        height="50" rx="8" fill="#c8d0de"/>
+  <rect x="240" y="280" width="50"
+        height="112" rx="8"
+        transform="rotate(35 265 336)"
+        fill="#e8192c"/>
+
+  <!-- Blue dot accent -->
+  <circle cx="370" cy="370" r="28"
+          fill="#1a6fff"/>
+</svg>
