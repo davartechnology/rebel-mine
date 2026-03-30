@@ -13,59 +13,33 @@ export default function Home() {
   const { data: session, status } = useSession()
   const router = useRouter()
 
-  // Navigation
   const [activePage, setActivePage] = useState<'mine' | 'referral' | 'history'>('mine')
-
-  // Balance globale
   const [balance, setBalance] = useState('0.00000000')
-
-  // State minage persistant entre les pages
   const [miningStatus, setMiningStatus] = useState<'idle' | 'mining' | 'cooldown'>('idle')
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const [sessionId, setSessionId] = useState('')
-  const [miningStartedAt, setMiningStartedAt] = useState<number | null>(null)
   const [animationSeconds, setAnimationSeconds] = useState(300)
   const [miningReward, setMiningReward] = useState(1.0)
   const [withdrawalCount, setWithdrawalCount] = useState(0)
   const [reservedBalance, setReservedBalance] = useState('0.00000000')
   const [totalMiningCount, setTotalMiningCount] = useState(0)
   const [todayEarned, setTodayEarned] = useState('0.00000000')
+  const [miningElapsed, setMiningElapsed] = useState(0)
 
-  // Refs pour les timers — persistants entre les rendus
   const cooldownRef = useRef<NodeJS.Timeout | null>(null)
   const miningRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login')
-    }
+    if (status === 'unauthenticated') router.push('/login')
   }, [status, router])
 
   useEffect(() => {
-    if (session?.user?.id) {
-      fetchStatus()
-    }
-  }, [session])
-
-  // Cleanup timers on unmount
-  useEffect(() => {
+    if (session?.user?.id) fetchStatus()
     return () => {
       if (cooldownRef.current) clearInterval(cooldownRef.current)
       if (miningRef.current) clearInterval(miningRef.current)
     }
-  }, [])
-
-  const fetchBalance = async () => {
-    try {
-      const res = await fetch('/api/wallet/balance')
-      const data = await res.json()
-      if (data.balance !== undefined) {
-        setBalance(parseFloat(data.balance).toFixed(8))
-      }
-    } catch (err) {
-      console.error('Balance fetch error:', err)
-    }
-  }
+  }, [session])
 
   const fetchStatus = async () => {
     try {
@@ -73,22 +47,18 @@ export default function Home() {
         fetch('/api/mining/status'),
         fetch('/api/user/profile'),
       ])
-
       const statusData = await statusRes.json()
       const profileData = await profileRes.json()
 
-      // Mettre à jour le balance
-      if (statusData.balance) {
-        setBalance(parseFloat(statusData.balance).toFixed(8))
-      }
+      // Toujours afficher le vrai solde DB
+      const realBalance = parseFloat(statusData.balance || 0)
+      setBalance(realBalance.toFixed(8))
 
-      // Mettre à jour les stats
       setTotalMiningCount(statusData.totalMiningCount || 0)
       setTodayEarned(statusData.todayEarned || '0.00000000')
       setMiningReward(statusData.miningReward || 1.0)
       setAnimationSeconds(statusData.animationSeconds || 300)
 
-      // Mettre à jour le profil
       if (profileData.withdrawalCount !== undefined) {
         setWithdrawalCount(profileData.withdrawalCount)
       }
@@ -98,48 +68,37 @@ export default function Home() {
         )
       }
 
-      // Gérer le statut du minage
       if (statusData.activeSession) {
-        setMiningStatus('mining')
+        // Session active — calculer le temps écoulé
+        const startedAt = new Date(
+          statusData.activeSession.startedAt
+        ).getTime()
+        const elapsed = Math.floor(
+          (Date.now() - startedAt) / 1000
+        )
+        const remaining = Math.max(
+          0,
+          statusData.animationSeconds - elapsed
+        )
+
         setSessionId(statusData.activeSession.id)
-
-        const startedAt = new Date(statusData.activeSession.startedAt).getTime()
-        const elapsed = (Date.now() - startedAt) / 1000
-        const remaining = Math.max(0, statusData.animationSeconds - elapsed)
-
-        // Calculer le solde actuel basé sur le temps écoulé
-        const currentProgress = Math.min(elapsed / statusData.animationSeconds, 1)
-        const baseBalance = parseFloat(statusData.balance) - (statusData.miningReward * currentProgress)
-        const startBalance = Math.max(0, baseBalance)
+        setMiningElapsed(elapsed)
 
         if (remaining > 0) {
-          // Minage encore en cours — reprendre l'animation au bon point
-          startMiningTimer(
+          setMiningStatus('mining')
+          startCooldownMiningTimer(
             remaining,
-            statusData.activeSession.id,
-            startBalance,
-            statusData.miningReward
+            statusData.activeSession.id
           )
         } else {
-          // Le minage est terminé côté temps mais pas encore complété
-          // On le complète immédiatement
-          fetch('/api/mining/complete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: statusData.activeSession.id }),
-          }).then(async (res) => {
-            if (res.ok) {
-              const data = await res.json()
-              setBalance(data.newBalance)
-              setMiningStatus('cooldown')
-              const remaining = data.cooldownRemainingSeconds || 1200
-              setCooldownSeconds(remaining)
-              startCooldownTimer(remaining)
-            }
-          }).catch(console.error)
+          // Temps écoulé — compléter
+          completeMining(statusData.activeSession.id)
         }
-      } else if (!statusData.canMine && statusData.cooldownRemainingSeconds > 0) {
-        // Cooldown en cours
+
+      } else if (
+        !statusData.canMine &&
+        statusData.cooldownRemainingSeconds > 0
+      ) {
         setMiningStatus('cooldown')
         setCooldownSeconds(statusData.cooldownRemainingSeconds)
         startCooldownTimer(statusData.cooldownRemainingSeconds)
@@ -148,7 +107,54 @@ export default function Home() {
       }
 
     } catch (err) {
-      console.error('Status error:', err)
+      console.error('fetchStatus error:', err)
+    }
+  }
+
+  const startCooldownMiningTimer = (
+    remaining: number,
+    sid: string
+  ) => {
+    if (miningRef.current) clearInterval(miningRef.current)
+    let secondsLeft = remaining
+
+    miningRef.current = setInterval(async () => {
+      secondsLeft -= 1
+
+      if (secondsLeft <= 0) {
+        if (miningRef.current) clearInterval(miningRef.current)
+        completeMining(sid)
+      }
+    }, 1000)
+  }
+
+  const completeMining = async (sid: string) => {
+    try {
+      const res = await fetch('/api/mining/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: sid }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        // Mettre à jour le solde avec la vraie valeur DB
+        setBalance(parseFloat(data.newBalance).toFixed(8))
+        setTotalMiningCount(prev => prev + 1)
+        setTodayEarned(prev =>
+          (parseFloat(prev) + data.reward).toFixed(8)
+        )
+
+        const statusRes = await fetch('/api/mining/status')
+        const statusData = await statusRes.json()
+        const remaining = statusData.cooldownRemainingSeconds || 1200
+
+        setMiningStatus('cooldown')
+        setCooldownSeconds(remaining)
+        startCooldownTimer(remaining)
+      }
+    } catch (err) {
+      console.error('completeMining error:', err)
     }
   }
 
@@ -164,57 +170,6 @@ export default function Home() {
         if (cooldownRef.current) clearInterval(cooldownRef.current)
         setMiningStatus('idle')
         setCooldownSeconds(0)
-      }
-    }, 1000)
-  }
-
-  const startMiningTimer = (
-    duration: number,
-    sid: string,
-    startBalance: number,
-    reward: number
-  ) => {
-    if (miningRef.current) clearInterval(miningRef.current)
-    const startTime = Date.now()
-
-    miningRef.current = setInterval(async () => {
-      const elapsed = (Date.now() - startTime) / 1000
-      const progress = Math.min(elapsed / duration, 1)
-      const current = startBalance + (reward * progress)
-
-      setBalance(current.toFixed(8))
-
-      if (progress >= 1) {
-        if (miningRef.current) clearInterval(miningRef.current)
-
-        try {
-          const res = await fetch('/api/mining/complete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: sid }),
-          })
-
-          const data = await res.json()
-
-          if (res.ok) {
-            setBalance(data.newBalance)
-            setTotalMiningCount(prev => prev + 1)
-            setTodayEarned(prev =>
-              (parseFloat(prev) + data.reward).toFixed(8)
-            )
-
-            // Récupérer le cooldown
-            const statusRes = await fetch('/api/mining/status')
-            const statusData = await statusRes.json()
-            const remaining = statusData.cooldownRemainingSeconds || 1200
-
-            setMiningStatus('cooldown')
-            setCooldownSeconds(remaining)
-            startCooldownTimer(remaining)
-          }
-        } catch (err) {
-          console.error('Complete error:', err)
-        }
       }
     }, 1000)
   }
@@ -282,17 +237,14 @@ export default function Home() {
             withdrawalCount={withdrawalCount}
             reservedBalance={reservedBalance}
             sessionId={sessionId}
-            onMiningStart={(sid, adTok, adT) => {
-              setSessionId(sid)
-            }}
-            onMiningComplete={() => {
-              fetchBalance()
-              fetchStatus()
-            }}
+            miningElapsed={miningElapsed}
+            onMiningStart={(sid) => setSessionId(sid)}
+            onMiningComplete={() => fetchStatus()}
             onStatusChange={setMiningStatus}
             onCooldownStart={startCooldownTimer}
-            onMiningTimerStart={startMiningTimer}
-            onBalanceUpdate={fetchBalance}
+            onMiningTimerStart={startCooldownMiningTimer}
+            onBalanceUpdate={fetchStatus}
+            onBalanceChange={setBalance}
           />
         )}
         {activePage === 'referral' && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import AdOverlay from './AdOverlay'
 import MineButton from './MineButton'
 import BalanceCard from './BalanceCard'
@@ -18,12 +18,14 @@ interface MinePageProps {
   withdrawalCount: number
   reservedBalance: string
   sessionId: string
-  onMiningStart: (sid: string, adToken: string, adType: string) => void
+  miningElapsed: number
+  onMiningStart: (sid: string) => void
   onMiningComplete: () => void
   onStatusChange: (status: 'idle' | 'mining' | 'cooldown') => void
   onCooldownStart: (seconds: number) => void
-  onMiningTimerStart: (duration: number, sid: string, startBalance: number, reward: number) => void
+  onMiningTimerStart: (remaining: number, sid: string) => void
   onBalanceUpdate: () => void
+  onBalanceChange: (balance: string) => void
 }
 
 export default function MinePage({
@@ -38,19 +40,63 @@ export default function MinePage({
   withdrawalCount,
   reservedBalance,
   sessionId,
+  miningElapsed,
   onMiningStart,
   onMiningComplete,
   onStatusChange,
   onCooldownStart,
   onMiningTimerStart,
   onBalanceUpdate,
+  onBalanceChange,
 }: MinePageProps) {
   const [showAd, setShowAd] = useState(false)
   const [adType, setAdType] = useState<'video_reward' | 'interstitial'>('video_reward')
   const [currentAdToken, setCurrentAdToken] = useState('')
   const [currentSessionId, setCurrentSessionId] = useState('')
   const [showWithdraw, setShowWithdraw] = useState(false)
-  const [rewardFloat, setRewardFloat] = useState(false)
+
+  // Animation visuelle du solde — uniquement pour l'effet
+  const [displayBalance, setDisplayBalance] = useState(balance)
+  const animRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Synchroniser le displayBalance avec le vrai solde
+  // quand on n'est pas en train de miner
+  useEffect(() => {
+    if (miningStatus !== 'mining') {
+      setDisplayBalance(balance)
+    }
+  }, [balance, miningStatus])
+
+  // Animation visuelle quand le minage commence
+  useEffect(() => {
+    if (miningStatus === 'mining') {
+      if (animRef.current) clearInterval(animRef.current)
+
+      const baseBalance = parseFloat(balance)
+      const elapsed = miningElapsed
+      const totalDuration = animationSeconds
+
+      const start = Date.now() - (elapsed * 1000)
+
+      animRef.current = setInterval(() => {
+        const nowElapsed = (Date.now() - start) / 1000
+        const progress = Math.min(nowElapsed / totalDuration, 1)
+        const visual = baseBalance + (miningReward * progress)
+        setDisplayBalance(visual.toFixed(8))
+
+        if (progress >= 1) {
+          if (animRef.current) clearInterval(animRef.current)
+        }
+      }, 500)
+    } else {
+      if (animRef.current) clearInterval(animRef.current)
+      setDisplayBalance(balance)
+    }
+
+    return () => {
+      if (animRef.current) clearInterval(animRef.current)
+    }
+  }, [miningStatus])
 
   const withdrawalMinimum = 10
   const progressPercent = Math.min(
@@ -75,7 +121,7 @@ export default function MinePage({
       setCurrentAdToken(data.adToken)
       setAdType(data.adType)
       setShowAd(true)
-      onMiningStart(data.sessionId, data.adToken, data.adType)
+      onMiningStart(data.sessionId)
     } catch (err) {
       console.error('Mine start error:', err)
     }
@@ -102,14 +148,8 @@ export default function MinePage({
       }
 
       onStatusChange('mining')
-      onMiningTimerStart(
-        animationSeconds,
-        currentSessionId,
-        parseFloat(balance),
-        miningReward
-      )
+      onMiningTimerStart(animationSeconds, currentSessionId)
 
-      setRewardFloat(false)
     } catch (err) {
       console.error('Ad verify error:', err)
     }
@@ -131,30 +171,10 @@ export default function MinePage({
         <AdOverlay adType={adType} onComplete={handleAdComplete} />
       )}
 
-      {rewardFloat && (
-        <div style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          fontFamily: 'Bebas Neue, sans-serif',
-          fontSize: '28px',
-          fontWeight: 700,
-          color: '#16a34a',
-          textShadow: '0 0 20px rgba(22,163,74,0.6)',
-          pointerEvents: 'none',
-          zIndex: 999,
-          animation: 'floatUp 2s ease-out forwards',
-          letterSpacing: '3px',
-        }}>
-          +{miningReward.toFixed(8)} RBL
-        </div>
-      )}
-
       <BalanceCard
         balance={balance}
         animating={miningStatus === 'mining'}
-        animatedBalance={balance}
+        animatedBalance={displayBalance}
       />
 
       {/* PROGRESS BAR */}
@@ -347,7 +367,6 @@ export default function MinePage({
           onClose={() => setShowWithdraw(false)}
           onSuccess={() => {
             onBalanceUpdate()
-            onMiningComplete()
             setShowWithdraw(false)
           }}
         />
