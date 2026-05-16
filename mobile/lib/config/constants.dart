@@ -38,5 +38,6 @@ class AppConstants {
   static const String interstitialAdId =
       'ca-app-pub-3940256099942544/1033173712';
   static const String rewardedAdId =
+  static const String mobileAuthUrl = '$baseUrl/api/auth/mobile';
       'ca-app-pub-3940256099942544/5224354917';
 }

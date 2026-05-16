@@ -9,7 +9,7 @@ class ApiService {
     final token = await StorageService.getToken();
     return {
       'Content-Type': 'application/json',
-      if (token != null) 'Cookie': 'next-auth.session-token=$token',
+      if (token != null) 'Authorization': 'Bearer $token',
     };
   }
 
