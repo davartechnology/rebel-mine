@@ -38,6 +38,7 @@ export default function BalanceCard({
         fontFamily: 'Barlow Condensed, sans-serif',
         fontWeight: 600,
         position: 'relative',
+        // SHEE branding
         zIndex: 1,
       }}>
         Solde actuel
@@ -67,7 +68,7 @@ export default function BalanceCard({
         position: 'relative',
         zIndex: 1,
       }}>
-        REBEL
+        SHEE
       </div>
     </div>
   )

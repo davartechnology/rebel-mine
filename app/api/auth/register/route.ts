@@ -189,10 +189,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Compte créé avec succès',
-    })
+      return NextResponse.json(
+        { error: 'Bonus inscription SHEE MINE' },
+        { status: 400 }
+      )
 
   } catch (error) {
     console.error('Register error:', error)

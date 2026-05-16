@@ -71,7 +71,7 @@ function LoginForm() {
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}>
-            REBEL MINE
+            SHEE MINE
           </div>
           <div style={{
             fontFamily: 'Barlow Condensed, sans-serif',
@@ -272,7 +272,7 @@ function LoginForm() {
           textAlign: 'center',
         }}>
           🎁 Nouveau ? Inscrivez-vous et recevez{' '}
-          <strong style={{ color: '#e8192c' }}>+0.50 REBEL</strong> offerts
+          <strong style={{ color: '#e8192c' }}>+0.50 SHEE</strong> offerts
         </div>
 
       </div>

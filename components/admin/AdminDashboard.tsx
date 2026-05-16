@@ -137,7 +137,7 @@ export default function AdminDashboard() {
           letterSpacing: '3px',
           textTransform: 'uppercase',
         }}>
-          REBEL Mine · Panneau de contrôle
+          SHEE MINE · Panneau de contrôle
         </div>
       </div>
 
@@ -204,8 +204,8 @@ export default function AdminDashboard() {
               {[
                 { label: 'Total Users', value: stats.totalUsers, icon: '👥' },
                 { label: 'Users Actifs', value: stats.activeUsers, icon: '⚡' },
-                { label: 'Total Miné', value: `${stats.totalMined} RBL`, icon: '⛏️' },
-                { label: 'Total Retiré', value: `${stats.totalWithdrawn} RBL`, icon: '💸' },
+                { label: 'Total Miné', value: `${stats.totalMined} SHEE`, icon: '⛏️' },
+                { label: 'Total Retiré', value: `${stats.totalWithdrawn} SHEE`, icon: '💸' },
                 { label: 'Retraits En Attente', value: stats.pendingWithdrawals, icon: '⏳' },
                 { label: 'Minages Aujourd\'hui', value: stats.todayMinings, icon: '📈' },
               ].map((s) => (
@@ -291,7 +291,7 @@ export default function AdminDashboard() {
                           color: '#e8192c',
                           letterSpacing: '1px',
                         }}>
-                          {w.sent} RBL
+                          {w.sent} SHEE
                         </div>
                         <div style={{
                           fontFamily: 'Barlow Condensed, sans-serif',

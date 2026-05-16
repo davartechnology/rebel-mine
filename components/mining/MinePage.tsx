@@ -189,7 +189,7 @@ export default function MinePage({
           fontFamily: 'Barlow Condensed, sans-serif',
         }}>
           <span>Progression retrait</span>
-          <span>{balance} / {withdrawalMinimum} RBL</span>
+          <span>{balance} / {withdrawalMinimum} SHE</span>
         </div>
         <div style={{
           width: '100%',
@@ -257,7 +257,7 @@ export default function MinePage({
               letterSpacing: '1px',
               fontFamily: 'Barlow Condensed, sans-serif',
             }}>
-              REBEL
+              SHEE
             </div>
           </div>
         </div>
@@ -277,8 +277,8 @@ export default function MinePage({
         textAlign: 'center',
         lineHeight: '1.6',
       }}>
-        ℹ️ Token REBEL non lancé · Prix actuel :
-        <strong style={{ color: '#e8192c' }}> 0.002$</strong> par REBEL ·
+        ℹ️ Token SHEE non lancé · Prix actuel :
+        <strong style={{ color: '#e8192c' }}> 0.002$</strong> par SHEE ·
         Retraits via FaucetPay & USDT TRC20
       </div>
 
@@ -297,7 +297,7 @@ export default function MinePage({
       }}>
         {[
           { value: totalMiningCount.toString(), label: 'Total minages' },
-          { value: todayEarned, label: "Aujourd'hui (RBL)" },
+          { value: todayEarned, label: "Aujourd'hui (SHE)" },
         ].map((stat) => (
           <div key={stat.label} style={{
             background: '#12151e',
@@ -357,7 +357,7 @@ export default function MinePage({
       >
         {canWithdraw
           ? '✅ RETRAIT DISPONIBLE'
-          : `🔒 RETRAIT — MIN. ${withdrawalMinimum} REBEL`}
+          : `🔒 RETRAIT — MIN. ${withdrawalMinimum} SHEE`}
       </button>
 
       {showWithdraw && (

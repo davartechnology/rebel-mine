@@ -103,7 +103,7 @@ export default function HistoryPage({ userId }: HistoryPageProps) {
           letterSpacing: '1px',
           fontFamily: 'Barlow Condensed, sans-serif',
         }}>
-          Toutes vos activités REBEL
+          Toutes vos activités SHEE
         </div>
       </div>
 
@@ -229,7 +229,7 @@ export default function HistoryPage({ userId }: HistoryPageProps) {
                   marginTop: '2px',
                   fontFamily: 'Barlow Condensed, sans-serif',
                 }}>
-                  REBEL
+                  SHEE
                 </div>
               </div>
             </div>

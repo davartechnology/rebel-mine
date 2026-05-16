@@ -37,7 +37,7 @@ export default function Navbar({
           WebkitTextFillColor: 'transparent',
           letterSpacing: '4px',
         }}>
-          REBELONE
+          SHIEFO
         </div>
 
         {/* BALANCE PILL */}

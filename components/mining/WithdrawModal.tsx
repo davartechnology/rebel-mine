@@ -45,7 +45,7 @@ export default function WithdrawModal({
     }
 
     if (amountNum < minimum) {
-      setError(`Minimum requis : ${minimum} REBEL`)
+      setError(`Minimum requis : ${minimum} SHEE`)
       return
     }
 
@@ -134,7 +134,7 @@ export default function WithdrawModal({
             letterSpacing: '3px',
             color: '#e8edf5',
           }}>
-            RETRAIT REBEL
+            RETRAIT SHEE
           </div>
           <button
             onClick={onClose}
@@ -204,7 +204,7 @@ export default function WithdrawModal({
                   color: '#e8192c',
                   letterSpacing: '1px',
                 }}>
-                  {balance} RBL
+                  {balance} SHEE
                 </span>
               </div>
 
@@ -235,7 +235,7 @@ export default function WithdrawModal({
                   color: '#4a5568',
                   marginBottom: '8px',
                 }}>
-                  Montant (min. {minimum} REBEL)
+                  Montant (min. {minimum} SHEE)
                 </label>
                 <input
                   type="number"
@@ -374,10 +374,10 @@ export default function WithdrawModal({
                     Récapitulatif
                   </div>
                   {[
-                    { label: 'Montant demandé', value: `${calc.requested.toFixed(8)} RBL`, color: '#e8edf5' },
-                    { label: 'Réserve token (10%)', value: `- ${calc.reserve.toFixed(8)} RBL`, color: '#e8192c' },
-                    { label: 'Frais transaction (3%)', value: `- ${calc.fee.toFixed(8)} RBL`, color: '#e8192c' },
-                    { label: 'Vous recevez (87%)', value: `${calc.net.toFixed(8)} RBL`, color: '#16a34a' },
+                    { label: 'Montant demandé', value: `${calc.requested.toFixed(8)} SHE`, color: '#e8edf5' },
+                    { label: 'Réserve token (10%)', value: `- ${calc.reserve.toFixed(8)} SHE`, color: '#e8192c' },
+                    { label: 'Frais transaction (3%)', value: `- ${calc.fee.toFixed(8)} SHE`, color: '#e8192c' },
+                    { label: 'Vous recevez (87%)', value: `${calc.net.toFixed(8)} SHE`, color: '#16a34a' },
                     { label: 'Valeur estimée', value: `≈ ${amountUsd}$`, color: '#c9a84c' },
                   ].map((row) => (
                     <div key={row.label} style={{
@@ -421,7 +421,7 @@ export default function WithdrawModal({
                 lineHeight: '1.6',
               }}>
                 ℹ️ La réserve de 10% sera transférée sur votre wallet
-                au lancement officiel du token REBEL sur la blockchain.
+                au lancement officiel du token SHEE sur la blockchain.
               </div>
 
               {/* SUBMIT */}

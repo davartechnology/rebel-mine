@@ -5,13 +5,13 @@ import { authOptions } from '@/lib/auth'
 import SessionWrapper from '@/components/layout/SessionWrapper'
 
 export const metadata: Metadata = {
-  title: 'REBEL Mine — REBELONE',
-  description: 'Mine du REBEL et gagne de l\'argent réel. Première app de l\'écosystème REBELONE.',
+  title: 'SHEE MINE — SHIEFO',
+  description: 'Build the future. Own the system. Mine du SHEE et gagne de l\'argent réel.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'REBEL Mine',
+    title: 'SHEE MINE',
   },
 }
 

@@ -38,6 +38,7 @@ export default function MineButton({
       position: 'relative',
       display: 'flex',
       alignItems: 'center',
+      // MIINER/MIINAGE branding
       justifyContent: 'center',
       height: '220px',
       width: '220px',
@@ -100,10 +101,10 @@ export default function MineButton({
             : '#e8192c',
         }}>
           {status === 'mining'
-            ? 'MINAGE...'
+            ? 'MIINAGE...'
             : status === 'cooldown'
             ? formatCooldown(cooldownSeconds)
-            : 'MINER'}
+            : 'MIINER'}
         </span>
       </button>
     </div>

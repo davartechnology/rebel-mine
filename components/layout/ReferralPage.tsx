@@ -110,7 +110,7 @@ export default function ReferralPage({ userId }: ReferralPageProps) {
           letterSpacing: '1px',
           fontFamily: 'Barlow Condensed, sans-serif',
         }}>
-          Invitez des amis — Gagnez du REBEL automatiquement
+          Invitez des amis — Gagnez du SHEE automatiquement
         </div>
       </div>
 
@@ -122,7 +122,7 @@ export default function ReferralPage({ userId }: ReferralPageProps) {
       }}>
         {[
           { value: info?.referralCount || 0, label: 'Filleuls' },
-          { value: info?.earnings.total || '0.00000000', label: 'Gains Réf. (RBL)' },
+          { value: info?.earnings.total || '0.00000000', label: 'Gains Réf. (SHEE)' },
           {
             value: `${tierEmojis[info?.tier || 'bronze']} ${(info?.tier || 'bronze').toUpperCase()}`,
             label: 'Tier actuel',
@@ -188,7 +188,7 @@ export default function ReferralPage({ userId }: ReferralPageProps) {
           <input
             type="text"
             readOnly
-            value={`rebelmine.app/ref/${info?.referralCode || '...'}`}
+            value={`sheemiine.app/ref/${info?.referralCode || '...'}`}
             style={{
               flex: 1,
               background: '#080a0f',
@@ -292,7 +292,7 @@ export default function ReferralPage({ userId }: ReferralPageProps) {
               color: '#c9a84c',
               letterSpacing: '1px',
             }}>
-              +{c.earned} RBL
+              +{c.earned} SHEE
             </div>
           </div>
         ))}

@@ -84,7 +84,7 @@ export default function RegisterPage() {
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}>
-            REBEL MINE
+            SHEE MINE
           </div>
           <div style={{
             fontFamily: 'Barlow Condensed, sans-serif',
@@ -111,7 +111,7 @@ export default function RegisterPage() {
           color: '#e8192c',
           letterSpacing: '1px',
         }}>
-          🎁 Bonus inscription : <strong>+0.50 REBEL offerts</strong>
+          🎁 Bonus inscription : <strong>+0.50 SHEE offerts</strong>
         </div>
 
         {/* FORM CARD */}
@@ -140,7 +140,7 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit}>
             {[
-              { key: 'username', label: 'Nom d\'utilisateur', type: 'text', placeholder: 'rebel_user' },
+              { key: 'username', label: 'Nom d\'utilisateur', type: 'text', placeholder: 'shee_user' },
               { key: 'email', label: 'Email', type: 'email', placeholder: 'vous@email.com' },
               { key: 'password', label: 'Mot de passe', type: 'password', placeholder: '••••••••' },
               { key: 'confirmPassword', label: 'Confirmer le mot de passe', type: 'password', placeholder: '••••••••' },
@@ -242,8 +242,8 @@ export default function RegisterPage() {
           lineHeight: '1.6',
           textAlign: 'center',
         }}>
-          ℹ️ Le token REBEL n'est pas encore lancé sur la blockchain.
-          Prix actuel fixé à <strong style={{ color: '#e8192c' }}>0.002$</strong> par REBEL.
+          ℹ️ Le token SHEE n'est pas encore lancé sur la blockchain.
+          Prix actuel fixé à <strong style={{ color: '#e8192c' }}>0.002$</strong> par SHEE.
           Les retraits sont traités via FaucetPay et USDT TRC20.
         </div>
 

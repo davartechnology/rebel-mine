@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     // On accepte à partir de 290 secondes (5min - 10s de tolérance)
     if (elapsedSeconds < 290) {
       return NextResponse.json(
-        { error: `Minage incomplet. Encore ${Math.ceil(290 - elapsedSeconds)} secondes.` },
+        { error: `Miinage incomplet. Encore ${Math.ceil(290 - elapsedSeconds)} secondes.` },
         { status: 400 }
       )
     }

@@ -193,7 +193,7 @@ export default function Home() {
           WebkitTextFillColor: 'transparent',
           animation: 'pulse 1.5s ease infinite',
         }}>
-          REBEL MINE
+          SHEE MINE
         </div>
         <div style={{
           fontFamily: 'Barlow Condensed, sans-serif',
