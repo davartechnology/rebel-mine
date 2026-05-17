@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/db'
+import pool from '@/lib/db'
 import bcrypt from 'bcrypt'
-import jwt from 'jsonwebtoken'
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,62 +13,56 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Chercher l'utilisateur
-    const result = await query(
-      'SELECT * FROM users WHERE email = $1',
-      [email.toLowerCase().trim()]
-    )
-
-    if (result.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'Email ou mot de passe incorrect' },
-        { status: 401 }
+    const client = await pool.connect()
+    try {
+      const result = await client.query(
+        'SELECT * FROM users WHERE LOWER(email) = LOWER($1)',
+        [email.trim()]
       )
-    }
 
-    const user = result.rows[0]
+      if (result.rows.length === 0) {
+        return NextResponse.json(
+          { error: 'Email ou mot de passe incorrect' },
+          { status: 401 }
+        )
+      }
 
-    // Vérifier le mot de passe
-    const isValid = await bcrypt.compare(password, user.password_hash)
+      const user = result.rows[0]
+      const isValid = await bcrypt.compare(password, user.password_hash)
 
-    if (!isValid) {
-      return NextResponse.json(
-        { error: 'Email ou mot de passe incorrect' },
-        { status: 401 }
+      if (!isValid) {
+        return NextResponse.json(
+          { error: 'Email ou mot de passe incorrect' },
+          { status: 401 }
+        )
+      }
+
+      await client.query(
+        'UPDATE users SET last_login = NOW() WHERE id = $1',
+        [user.id]
       )
-    }
 
-    // Générer un JWT token
-    const token = jwt.sign(
-      {
+      // Token simple — l'ID user encodé en base64
+      const tokenData = JSON.stringify({
         userId: user.id,
         email: user.email,
-        username: user.username,
-      },
-      process.env.NEXTAUTH_SECRET!,
-      { expiresIn: '30d' }
-    )
+        exp: Date.now() + (30 * 24 * 60 * 60 * 1000)
+      })
+      const token = Buffer.from(tokenData).toString('base64')
 
-    // Mettre à jour last_login
-    await query(
-      'UPDATE users SET last_login = NOW() WHERE id = $1',
-      [user.id]
-    )
-
-    return NextResponse.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        referralCode: user.referral_code,
-        tier: user.tier,
-        withdrawalCount: user.withdrawal_count,
-        isVerified: user.is_verified,
-      },
-    })
-
+      return NextResponse.json({
+        success: true,
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          referralCode: user.referral_code,
+        },
+      })
+    } finally {
+      client.release()
+    }
   } catch (error) {
     console.error('Mobile auth error:', error)
     return NextResponse.json(

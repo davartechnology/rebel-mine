@@ -4,63 +4,40 @@ import 'storage_service.dart';
 import '../config/constants.dart';
 
 class AuthService {
-  // Connexion
   static Future<Map<String, dynamic>> login({
-    // Connexion mobile JWT
-    static Future<Map<String, dynamic>> login({
-      required String email,
-      required String password,
-    }) async {
-      try {
-        final response = await http.post(
-          Uri.parse(AppConstants.mobileAuthUrl),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'email': email.trim(),
-            'password': password,
-          }),
-        ).timeout(const Duration(seconds: 15));
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse(AppConstants.mobileAuthUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email.trim(),
+          'password': password,
+        }),
+      ).timeout(const Duration(seconds: 15));
 
-        final data = jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
-        if (response.statusCode == 200 && data['success'] == true) {
-          // Sauvegarder le token JWT
-          await StorageService.saveSession(
-            token: data['token'],
-            email: data['user']['email'],
-            userId: data['user']['id'],
-          );
-          return {'success': true, 'user': data['user']};
-        } else {
-          return {
-            'success': false,
-            'error': data['error'] ?? 'Erreur de connexion',
-          };
-        }
-      } catch (e) {
-        return {'success': false, 'error': 'Erreur de connexion: $e'};
+      if (response.statusCode == 200 && data['success'] == true) {
+        await StorageService.saveSession(
+          token: data['token'],
+          email: data['user']['email'],
+          userId: data['user']['id'],
+        );
+        return {'success': true, 'user': data['user']};
+      } else {
+        return {
+          'success': false,
+          'error': data['error'] ?? 'Email ou mot de passe incorrect',
+        };
       }
-    }
-          final profile = jsonDecode(profileResponse.body);
-          await StorageService.saveSession(
-            token: sessionToken,
-            email: profile['email'] ?? email,
-            userId: profile['id'] ?? '',
-          );
-          return {'success': true, 'user': profile};
-        }
-      }
-
-      return {
-        'success': false,
-        'error': 'Email ou mot de passe incorrect',
-      };
     } catch (e) {
       return {'success': false, 'error': 'Erreur de connexion: $e'};
     }
   }
 
-  // Inscription
   static Future<Map<String, dynamic>> register({
     required String username,
     required String email,
@@ -94,12 +71,10 @@ class AuthService {
     }
   }
 
-  // Déconnexion
   static Future<void> logout() async {
     await StorageService.clearSession();
   }
 
-  // Vérifier session
   static Future<bool> isLoggedIn() async {
     return await StorageService.isLoggedIn();
   }
