@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
         [user.id]
       )
 
-      // Token simple — l'ID user encodé en base64
       const tokenData = JSON.stringify({
         userId: user.id,
         email: user.email,
