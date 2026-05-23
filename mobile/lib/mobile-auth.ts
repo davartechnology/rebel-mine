@@ -1,21 +1,17 @@
-import jwt from 'jsonwebtoken'
 import { NextRequest } from 'next/server'
 
-export async function getMobileUser(req: NextRequest) {
+export async function getMobileUserId(req: NextRequest): Promise<string | null> {
   try {
     const authHeader = req.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return null
-    }
+    if (!authHeader?.startsWith('Bearer ')) return null
 
     const token = authHeader.substring(7)
-    const decoded = jwt.verify(
-      token,
-      process.env.NEXTAUTH_SECRET!
-    ) as { userId: string; email: string; username: string }
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'))
 
-    return decoded
-  } catch (error) {
+    if (decoded.exp < Date.now()) return null
+
+    return decoded.userId
+  } catch {
     return null
   }
 }
