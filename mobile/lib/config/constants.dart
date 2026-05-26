@@ -1,7 +1,7 @@
 class AppConstants {
   static const String baseUrl = 'https://rebel-mine.vercel.app';
 
-  static const String mobileAuthUrl = '$baseUrl/api/auth/mobile';
+  static const String mobileAuthUrl = '$baseUrl/api/mobile-auth';
   static const String registerUrl = '$baseUrl/api/auth/register';
   static const String miningStatusUrl = '$baseUrl/api/mining/status';
   static const String miningStartUrl = '$baseUrl/api/mining/start';
