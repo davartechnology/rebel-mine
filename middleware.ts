@@ -5,7 +5,7 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   
   // Pages publiques — toujours accessibles
-  const publicPaths = ['/login', '/register', '/api/auth', '/_next', '/favicon.ico', '/public', '/manifest.json', '/icon.svg', '/icon-192.png', '/icon-512.png']
+  const publicPaths = ['/login', '/register', '/api/auth', '/api/mobile-auth', '/_next', '/favicon.ico', '/public', '/manifest.json', '/icon.svg', '/icon-192.png', '/icon-512.png']
   const isPublic = publicPaths.some(path => pathname.startsWith(path))
   
   if (isPublic) {
