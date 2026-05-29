@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import bcrypt from 'bcrypt'
-import { signToken } from '@/lib/jwt'
+import jwt from 'jsonwebtoken'
+
+const SECRET = process.env.JWT_SECRET || 'shee-mine-secret-2024'
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,7 +33,11 @@ export async function POST(req: NextRequest) {
 
       await client.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id])
 
-      const token = signToken({ userId: user.id, email: user.email })
+      const token = jwt.sign(
+        { userId: user.id, email: user.email },
+        SECRET,
+        { expiresIn: '30d' }
+      )
 
       return NextResponse.json({
         success: true,
