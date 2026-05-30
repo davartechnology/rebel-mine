@@ -237,7 +237,7 @@ class _HistoryTabState extends State<HistoryTab> {
   Widget _buildTransactionItem(dynamic t) {
     final type = t['type'] as String?;
     final color = _getColor(type);
-    final amount = (t['amount'] ?? 0.0).toDouble();
+    final amount = double.tryParse(t['amount'].toString()) ?? 0.0;
     final isWithdrawal = type == 'withdrawal';
 
     return Container(

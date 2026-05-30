@@ -21,7 +21,8 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   int _cooldownSeconds = 0;
   String? _errorMessage;
-  bool _isFirstMine = true; // true = interstitielle, false = rewarded
+  bool _isFirstMine = true;
+  bool _showReward = false;
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -67,7 +68,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
-  // ── Statut minage ─────────────────────────────────────────────────────────
+  // ── Statut minage ──────────────────────────────────────────────────────────
   Future<void> _loadStatus() async {
     try {
       final token = await StorageService.getToken();
@@ -83,8 +84,9 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        if (!mounted) return;
         setState(() {
-          _balance = (data['balance'] ?? 0.0).toDouble();
+          _balance = double.tryParse(data['balance'].toString()) ?? 0.0;
           _canMine = data['canMine'] ?? true;
           _isFirstMine = data['isFirstMine'] ?? true;
           _isLoading = false;
@@ -98,12 +100,14 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
           }
         });
       } else {
+        if (!mounted) return;
         setState(() {
           _isLoading = false;
           _canMine = true;
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _canMine = true;
@@ -111,10 +115,14 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     }
   }
 
-  // ── Timer cooldown ────────────────────────────────────────────────────────
+  // ── Timer cooldown ─────────────────────────────────────────────────────────
   void _startCooldownTimer() {
     _cooldownTimer?.cancel();
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       if (_cooldownSeconds <= 0) {
         timer.cancel();
         setState(() {
@@ -133,17 +141,23 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     return '$m:$s';
   }
 
-  // ── Chargement des pubs ───────────────────────────────────────────────────
+  // ── Chargement des pubs ────────────────────────────────────────────────────
   void _loadInterstitialAd() {
     InterstitialAd.load(
       adUnitId: AppConstants.interstitialAdId,
       request: const AdRequest(),
       adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) => setState(() {
-          _interstitialAd = ad;
-          _interstitialReady = true;
-        }),
-        onAdFailedToLoad: (_) => setState(() => _interstitialReady = false),
+        onAdLoaded: (ad) {
+          if (!mounted) return;
+          setState(() {
+            _interstitialAd = ad;
+            _interstitialReady = true;
+          });
+        },
+        onAdFailedToLoad: (_) {
+          if (!mounted) return;
+          setState(() => _interstitialReady = false);
+        },
       ),
     );
   }
@@ -153,27 +167,30 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
       adUnitId: AppConstants.rewardedAdId,
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (ad) => setState(() {
-          _rewardedAd = ad;
-          _rewardedReady = true;
-        }),
-        onAdFailedToLoad: (_) => setState(() => _rewardedReady = false),
+        onAdLoaded: (ad) {
+          if (!mounted) return;
+          setState(() {
+            _rewardedAd = ad;
+            _rewardedReady = true;
+          });
+        },
+        onAdFailedToLoad: (_) {
+          if (!mounted) return;
+          setState(() => _rewardedReady = false);
+        },
       ),
     );
   }
 
-  // ── Clic sur MINER ────────────────────────────────────────────────────────
+  // ── Clic sur MINER ─────────────────────────────────────────────────────────
   void _onMineTap() {
     if (!_canMine || _isMining) return;
 
-    // Après cooldown → rewarded video
-    // Premier minage ou pas de cooldown → interstitielle
     if (!_isFirstMine && _rewardedReady) {
       _showRewardedThenMine();
     } else if (_interstitialReady) {
       _showInterstitialThenMine();
     } else {
-      // Pas de pub dispo, on mine directement
       _executeMining();
     }
   }
@@ -218,8 +235,9 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     setState(() => _rewardedAd = null);
   }
 
-  // ── Exécuter le minage ────────────────────────────────────────────────────
+  // ── Exécuter le minage ─────────────────────────────────────────────────────
   Future<void> _executeMining() async {
+    if (!mounted) return;
     setState(() {
       _isMining = true;
       _errorMessage = null;
@@ -237,18 +255,25 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
         },
       ).timeout(const Duration(seconds: 15));
 
+      if (!mounted) return;
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
         setState(() {
-          _balance = (data['balance'] ?? _balance).toDouble();
+          _balance = double.tryParse(data['balance'].toString()) ?? _balance;
           _canMine = false;
           _isFirstMine = false;
           _cooldownSeconds = AppConstants.cooldownMinutes * 60;
           _isMining = false;
+          _showReward = true;
         });
         _startCooldownTimer();
         _showSnack('+${AppConstants.miningReward} SHEE miné ! 🎉');
+
+        // Cache l'animation après 2 secondes
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) setState(() => _showReward = false);
+        });
       } else {
         setState(() {
           _isMining = false;
@@ -256,6 +281,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isMining = false;
         _errorMessage = 'Erreur de connexion';
@@ -264,6 +290,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
   }
 
   void _showSnack(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: const TextStyle(color: Colors.white)),
@@ -274,7 +301,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  // ── UI ────────────────────────────────────────────────────────────────────
+  // ── UI ─────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return _isLoading
@@ -290,7 +317,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
                   children: [
                     _buildBalanceCard(),
                     const SizedBox(height: 32),
-                    _buildMineButton(),
+                    _buildMineButtonWithAnimation(),
                     const SizedBox(height: 24),
                     if (!_canMine) _buildCooldownCard(),
                     if (_errorMessage != null) _buildError(),
@@ -301,6 +328,45 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
               ),
             ),
           );
+  }
+
+  // Bouton + animation +SHEE
+  Widget _buildMineButtonWithAnimation() {
+    return SizedBox(
+      height: 240,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          _buildMineButton(),
+          if (_showReward)
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 1200),
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(0, -100 * value),
+                  child: Opacity(
+                    opacity: value < 0.7 ? 1.0 : (1.0 - value) / 0.3,
+                    child: Text(
+                      '+${AppConstants.miningReward} SHEE',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'BebasNeue',
+                        fontSize: 36,
+                        letterSpacing: 3,
+                        shadows: [
+                          Shadow(color: AppColors.red, blurRadius: 20),
+                          Shadow(color: AppColors.red, blurRadius: 40),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBalanceCard() {
@@ -495,6 +561,12 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
           _buildInfoRow('💰', 'Prix SHEE', '\$${AppConstants.tokenPrice} USD'),
           const Divider(color: Colors.white12, height: 20),
           _buildInfoRow('🎯', 'Retrait min.', '${AppConstants.withdrawalMinimum} SHEE'),
+          const Divider(color: Colors.white12, height: 20),
+          _buildInfoRow('👥', 'Parrainage niv.1', '20% par minage filleul'),
+          const Divider(color: Colors.white12, height: 20),
+          _buildInfoRow('👥', 'Parrainage niv.2', '10% par minage'),
+          const Divider(color: Colors.white12, height: 20),
+          _buildInfoRow('👥', 'Parrainage niv.3', '5% par minage'),
         ],
       ),
     );
@@ -508,7 +580,10 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
           children: [
             Text(emoji, style: const TextStyle(fontSize: 16)),
             const SizedBox(width: 8),
-            Text(label, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white54, fontSize: 13),
+            ),
           ],
         ),
         Text(

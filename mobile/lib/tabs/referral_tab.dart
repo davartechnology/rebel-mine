@@ -230,37 +230,56 @@ class _ReferralTabState extends State<ReferralTab> {
   }
 
   Widget _buildHowItWorks() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'COMMENT ÇA MARCHE',
-            style: TextStyle(
-              color: Colors.white,
-              fontFamily: 'BebasNeue',
-              fontSize: 18,
-              letterSpacing: 3,
-            ),
+  return Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1A1A1A),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.white12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'COMMISSIONS DE PARRAINAGE',
+          style: TextStyle(
+            color: Colors.white,
+            fontFamily: 'BebasNeue',
+            fontSize: 18,
+            letterSpacing: 3,
           ),
-          const SizedBox(height: 16),
-          _buildStep('1', 'Partage ton code avec tes amis'),
-          const SizedBox(height: 12),
-          _buildStep('2', 'Ils s\'inscrivent avec ton code'),
-          const SizedBox(height: 12),
-          _buildStep('3', 'Tu gagnes +0.5 SHEE par filleul'),
-          const SizedBox(height: 12),
-          _buildStep('4', 'Bonus supplémentaire à chaque minage de ton filleul'),
-        ],
-      ),
-    );
-  }
+        ),
+        const SizedBox(height: 16),
+        _buildStep('1', 'Tu invites quelqu\'un → tu gagnes 20% de chaque minage'),
+        const SizedBox(height: 12),
+        _buildStep('2', 'Ton filleul invite quelqu\'un → tu gagnes 10%, lui 20%'),
+        const SizedBox(height: 12),
+        _buildStep('3', 'Niveau 3 → tu gagnes 5%, niveau 2 gagne 10%, niveau 3 gagne 20%'),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.red.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.red.withOpacity(0.3)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.info_outline, color: AppColors.red, size: 16),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '1 SHEE miné = 0.20 SHEE niveau 1 + 0.10 SHEE niveau 2 + 0.05 SHEE niveau 3',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildStep(String number, String text) {
     return Row(
