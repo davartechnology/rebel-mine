@@ -1,102 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { query } from '@/lib/db'
-import crypto from 'crypto'
+import pool from '@/lib/db'
+import jwt from 'jsonwebtoken'
+
+const SECRET = process.env.JWT_SECRET || 'shee-mine-secret-2024'
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const auth = req.headers.get('authorization')
+    if (!auth?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
 
-    const userId = session.user.id
+    const decoded = jwt.verify(auth.substring(7), SECRET) as { userId: string }
+    const client = await pool.connect()
 
-    // Nettoyer automatiquement les sessions bloquées
-    // Une session pending depuis plus de 2 minutes est considérée bloquée
-    // Une session mining depuis plus de 310 secondes est considérée bloquée
-    await query(
-      `UPDATE mining_sessions
-       SET status = 'cancelled'
-       WHERE user_id = $1
-       AND (
-         (status = 'pending' AND started_at < NOW() - INTERVAL '2 minutes')
-         OR
-         (status = 'mining' AND started_at < NOW() - INTERVAL '310 seconds')
-       )`,
-      [userId]
-    )
-
-    // Vérifier s'il reste une session vraiment active
-    const activeCheck = await query(
-      `SELECT id, status, started_at FROM mining_sessions
-       WHERE user_id = $1
-       AND status IN ('pending', 'mining')`,
-      [userId]
-    )
-
-    if (activeCheck.rows.length > 0) {
-      const active = activeCheck.rows[0]
-      const startedAt = new Date(active.started_at)
-      const elapsedSeconds = (Date.now() - startedAt.getTime()) / 1000
-
-      return NextResponse.json(
-        {
-          error: 'Une session de minage est déjà en cours',
-          sessionId: active.id,
-          elapsedSeconds: Math.floor(elapsedSeconds),
-        },
-        { status: 400 }
+    try {
+      const result = await client.query(
+        'SELECT balance, last_mining FROM users WHERE id = $1',
+        [decoded.userId]
       )
-    }
 
-    // Vérifier le cooldown
-    const lastSession = await query(
-      `SELECT cooldown_until from mining_sessions
-       where user_id = $1
-       and status = 'completed'
-       order by completed_at desc limit 1`,
-      [userId]
-    )
+      const user = result.rows[0]
+      const lastMining = user.last_mining ? new Date(user.last_mining) : null
+      const cooldownMs = 20 * 60 * 1000
 
-    if (lastSession.rows.length > 0) {
-      const cooldownEnd = new Date(lastSession.rows[0].cooldown_until)
-      if (cooldownEnd > new Date()) {
-        const remaining = Math.ceil(
-          (cooldownEnd.getTime() - new Date().getTime()) / 1000
-        )
-        return NextResponse.json(
-          { error: `Cooldown actif. Encore ${remaining} secondes.` },
-          { status: 400 }
-        )
+      if (lastMining && (Date.now() - lastMining.getTime()) < cooldownMs) {
+        return NextResponse.json({ error: 'Cooldown actif' }, { status: 429 })
       }
+
+      const newBalance = parseFloat(user.balance || '0') + 1.0
+
+      await client.query(
+        'UPDATE users SET balance = $1, last_mining = NOW() WHERE id = $2',
+        [newBalance, decoded.userId]
+      )
+
+      return NextResponse.json({ success: true, balance: newBalance })
+    } finally {
+      client.release()
     }
-
-    // Sélectionner type de pub aléatoire
-    const adType = Math.random() < 0.5 ? 'video_reward' : 'interstitial'
-
-    // Générer token unique pour cette session
-    const adToken = crypto.randomBytes(32).toString('hex')
-
-    // Créer la session de minage
-    const newSession = await query(
-      `INSERT INTO mining_sessions
-        (user_id, ad_type, ad_token, status, started_at)
-       VALUES ($1, $2, $3, 'pending', NOW())
-       RETURNING id, ad_type`,
-      [userId, adType, adToken]
-    )
-
-    return NextResponse.json({
-      success: true,
-      sessionId: newSession.rows[0].id,
-      adType: newSession.rows[0].ad_type,
-      adToken,
-    })
-
-  } catch (error) {
-    console.error('Mining start error:', error)
+  } catch {
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }
