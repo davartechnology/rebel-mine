@@ -15,31 +15,30 @@ class MineTab extends StatefulWidget {
 }
 
 class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
-  // État
   double _balance = 0.0;
   bool _isMining = false;
   bool _canMine = true;
   bool _isLoading = true;
   int _cooldownSeconds = 0;
   String? _errorMessage;
+  bool _isFirstMine = true; // true = interstitielle, false = rewarded
 
-  // Animation
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
-  // Timer
   Timer? _cooldownTimer;
   Timer? _refreshTimer;
 
-  // AdMob
+  InterstitialAd? _interstitialAd;
+  bool _interstitialReady = false;
+
   RewardedAd? _rewardedAd;
-  bool _adLoaded = false;
+  bool _rewardedReady = false;
 
   @override
   void initState() {
     super.initState();
 
-    // Animation pulse
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -50,9 +49,9 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     );
 
     _loadStatus();
+    _loadInterstitialAd();
     _loadRewardedAd();
 
-    // Refresh toutes les 30 secondes
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _loadStatus();
     });
@@ -63,11 +62,12 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     _pulseController.dispose();
     _cooldownTimer?.cancel();
     _refreshTimer?.cancel();
+    _interstitialAd?.dispose();
     _rewardedAd?.dispose();
     super.dispose();
   }
 
-  // ── Charger le statut de minage ──────────────────────────────────────────
+  // ── Statut minage ─────────────────────────────────────────────────────────
   Future<void> _loadStatus() async {
     try {
       final token = await StorageService.getToken();
@@ -86,6 +86,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
         setState(() {
           _balance = (data['balance'] ?? 0.0).toDouble();
           _canMine = data['canMine'] ?? true;
+          _isFirstMine = data['isFirstMine'] ?? true;
           _isLoading = false;
 
           if (!_canMine && data['cooldownSeconds'] != null) {
@@ -99,7 +100,6 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
       } else {
         setState(() {
           _isLoading = false;
-          _balance = 0.0;
           _canMine = true;
         });
       }
@@ -122,9 +122,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
           _cooldownSeconds = 0;
         });
       } else {
-        setState(() {
-          _cooldownSeconds--;
-        });
+        setState(() => _cooldownSeconds--);
       }
     });
   }
@@ -135,10 +133,93 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     return '$m:$s';
   }
 
-  // ── Lancer le minage ─────────────────────────────────────────────────────
-  Future<void> _startMining() async {
+  // ── Chargement des pubs ───────────────────────────────────────────────────
+  void _loadInterstitialAd() {
+    InterstitialAd.load(
+      adUnitId: AppConstants.interstitialAdId,
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (ad) => setState(() {
+          _interstitialAd = ad;
+          _interstitialReady = true;
+        }),
+        onAdFailedToLoad: (_) => setState(() => _interstitialReady = false),
+      ),
+    );
+  }
+
+  void _loadRewardedAd() {
+    RewardedAd.load(
+      adUnitId: AppConstants.rewardedAdId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) => setState(() {
+          _rewardedAd = ad;
+          _rewardedReady = true;
+        }),
+        onAdFailedToLoad: (_) => setState(() => _rewardedReady = false),
+      ),
+    );
+  }
+
+  // ── Clic sur MINER ────────────────────────────────────────────────────────
+  void _onMineTap() {
     if (!_canMine || _isMining) return;
 
+    // Après cooldown → rewarded video
+    // Premier minage ou pas de cooldown → interstitielle
+    if (!_isFirstMine && _rewardedReady) {
+      _showRewardedThenMine();
+    } else if (_interstitialReady) {
+      _showInterstitialThenMine();
+    } else {
+      // Pas de pub dispo, on mine directement
+      _executeMining();
+    }
+  }
+
+  void _showInterstitialThenMine() {
+    _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _interstitialAd = null;
+        _interstitialReady = false;
+        _loadInterstitialAd();
+        _executeMining();
+      },
+      onAdFailedToShowFullScreenContent: (ad, _) {
+        ad.dispose();
+        _interstitialReady = false;
+        _loadInterstitialAd();
+        _executeMining();
+      },
+    );
+    _interstitialAd!.show();
+    setState(() => _interstitialAd = null);
+  }
+
+  void _showRewardedThenMine() {
+    _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _rewardedAd = null;
+        _rewardedReady = false;
+        _loadRewardedAd();
+        _executeMining();
+      },
+      onAdFailedToShowFullScreenContent: (ad, _) {
+        ad.dispose();
+        _rewardedReady = false;
+        _loadRewardedAd();
+        _executeMining();
+      },
+    );
+    _rewardedAd!.show(onUserEarnedReward: (_, __) {});
+    setState(() => _rewardedAd = null);
+  }
+
+  // ── Exécuter le minage ────────────────────────────────────────────────────
+  Future<void> _executeMining() async {
     setState(() {
       _isMining = true;
       _errorMessage = null;
@@ -162,14 +243,12 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
         setState(() {
           _balance = (data['balance'] ?? _balance).toDouble();
           _canMine = false;
+          _isFirstMine = false;
           _cooldownSeconds = AppConstants.cooldownMinutes * 60;
           _isMining = false;
         });
         _startCooldownTimer();
-        _showSuccessSnack('+${AppConstants.miningReward} SHEE miné !');
-
-        // Charger pub pour la prochaine fois
-        _loadRewardedAd();
+        _showSnack('+${AppConstants.miningReward} SHEE miné ! 🎉');
       } else {
         setState(() {
           _isMining = false;
@@ -184,75 +263,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     }
   }
 
-  // ── AdMob Rewarded ────────────────────────────────────────────────────────
-  void _loadRewardedAd() {
-    RewardedAd.load(
-      adUnitId: AppConstants.rewardedAdId,
-      request: const AdRequest(),
-      rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (ad) {
-          setState(() {
-            _rewardedAd = ad;
-            _adLoaded = true;
-          });
-        },
-        onAdFailedToLoad: (error) {
-          setState(() {
-            _adLoaded = false;
-          });
-        },
-      ),
-    );
-  }
-
-  void _watchAdForBonus() {
-    if (!_adLoaded || _rewardedAd == null) {
-      _showSuccessSnack('Pub non disponible, réessaie plus tard');
-      return;
-    }
-
-    _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (ad) {
-        ad.dispose();
-        _loadRewardedAd();
-      },
-      onAdFailedToShowFullScreenContent: (ad, error) {
-        ad.dispose();
-        _loadRewardedAd();
-      },
-    );
-
-    _rewardedAd!.show(
-      onUserEarnedReward: (ad, reward) async {
-        // Bonus +0.5 SHEE pour avoir regardé la pub
-        try {
-          final token = await StorageService.getToken();
-          if (token == null) return;
-
-          await http.post(
-            Uri.parse(AppConstants.miningVerifyAdUrl),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode({'adType': 'rewarded'}),
-          );
-
-          await _loadStatus();
-          _showSuccessSnack('+0.5 SHEE bonus pour la pub !');
-        } catch (e) {
-          // ignore
-        }
-      },
-    );
-
-    setState(() {
-      _rewardedAd = null;
-      _adLoaded = false;
-    });
-  }
-
-  void _showSuccessSnack(String message) {
+  void _showSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: const TextStyle(color: Colors.white)),
@@ -282,7 +293,6 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
                     _buildMineButton(),
                     const SizedBox(height: 24),
                     if (!_canMine) _buildCooldownCard(),
-                    if (_canMine && _adLoaded) _buildAdBonus(),
                     if (_errorMessage != null) _buildError(),
                     const SizedBox(height: 32),
                     _buildInfoCard(),
@@ -293,7 +303,6 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
           );
   }
 
-  // Carte solde
   Widget _buildBalanceCard() {
     return Container(
       width: double.infinity,
@@ -334,20 +343,16 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
           const SizedBox(height: 4),
           Text(
             '≈ \$${(_balance * AppConstants.tokenPrice).toStringAsFixed(4)} USD',
-            style: const TextStyle(
-              color: Colors.white38,
-              fontSize: 13,
-            ),
+            style: const TextStyle(color: Colors.white38, fontSize: 13),
           ),
         ],
       ),
     );
   }
 
-  // Bouton de minage
   Widget _buildMineButton() {
     return GestureDetector(
-      onTap: _canMine && !_isMining ? _startMining : null,
+      onTap: _canMine && !_isMining ? _onMineTap : null,
       child: AnimatedBuilder(
         animation: _pulseAnimation,
         builder: (context, child) {
@@ -358,9 +363,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
               height: 200,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: _canMine
-                    ? AppColors.red
-                    : const Color(0xFF333333),
+                color: _canMine ? AppColors.red : const Color(0xFF333333),
                 boxShadow: _canMine
                     ? [
                         BoxShadow(
@@ -413,7 +416,6 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  // Cooldown timer
   Widget _buildCooldownCard() {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -452,39 +454,6 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  // Bonus pub
-  Widget _buildAdBonus() {
-    return GestureDetector(
-      onTap: _watchAdForBonus,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2E),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF1A6FFF).withOpacity(0.5)),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.play_circle_fill, color: Color(0xFF1A6FFF), size: 24),
-            SizedBox(width: 10),
-            Text(
-              'REGARDER UNE PUB → +0.5 SHEE',
-              style: TextStyle(
-                color: Color(0xFF1A6FFF),
-                fontFamily: 'BebasNeue',
-                fontSize: 15,
-                letterSpacing: 2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Erreur
   Widget _buildError() {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -509,7 +478,6 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  // Info card
   Widget _buildInfoCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -540,10 +508,7 @@ class _MineTabState extends State<MineTab> with SingleTickerProviderStateMixin {
           children: [
             Text(emoji, style: const TextStyle(fontSize: 16)),
             const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white54, fontSize: 13),
-            ),
+            Text(label, style: const TextStyle(color: Colors.white54, fontSize: 13)),
           ],
         ),
         Text(

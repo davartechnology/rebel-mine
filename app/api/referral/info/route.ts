@@ -1,103 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { query } from '@/lib/db'
+import pool from '@/lib/db'
+import jwt from 'jsonwebtoken'
+
+const SECRET = process.env.JWT_SECRET || 'shee-mine-secret-2024'
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const auth = req.headers.get('authorization')
+    if (!auth?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
+    const decoded = jwt.verify(auth.substring(7), SECRET) as { userId: string }
+    const client = await pool.connect()
+    try {
+      const userResult = await client.query(
+        'SELECT referral_code FROM users WHERE id = $1',
+        [decoded.userId]
+      )
+      const referralCode = userResult.rows[0]?.referral_code
 
-    const userId = session.user.id
+      const referralsResult = await client.query(
+        `SELECT username, created_at as "joinedAt" FROM users 
+         WHERE referred_by = $1 ORDER BY created_at DESC`,
+        [decoded.userId]
+      )
 
-    // Infos user
-    const user = await query(
-      'SELECT referral_code, tier FROM users WHERE id = $1',
-      [userId]
-    )
+      const referrals = referralsResult.rows.map(r => ({
+        username: r.username,
+        joinedAt: r.joinedAt,
+        bonus: 0.5,
+      }))
 
-    if (user.rows.length === 0) {
-      return NextResponse.json({ error: 'User non trouvé' }, { status: 404 })
+      return NextResponse.json({
+        referralCode,
+        totalReferrals: referrals.length,
+        referralEarnings: referrals.length * 0.5,
+        referrals,
+      })
+    } finally {
+      client.release()
     }
-
-    // Nombre de filleuls
-    const refCount = await query(
-      `SELECT COUNT(*) FROM referrals
-       WHERE referrer_id = $1`,
-      [userId]
-    )
-
-    const referralCount = parseInt(refCount.rows[0].count)
-
-    // Gains totaux de parrainage
-    const earnings = await query(
-      `SELECT
-        COALESCE(SUM(CASE WHEN type = 'referral_n1' THEN amount ELSE 0 END), 0) as n1,
-        COALESCE(SUM(CASE WHEN type = 'referral_n2' THEN amount ELSE 0 END), 0) as n2,
-        COALESCE(SUM(CASE WHEN type = 'referral_n3' THEN amount ELSE 0 END), 0) as n3,
-        COALESCE(SUM(CASE WHEN type IN ('referral_n1','referral_n2','referral_n3') THEN amount ELSE 0 END), 0) as total
-       FROM transactions
-       WHERE user_id = $1`,
-      [userId]
-    )
-
-    // Liste des filleuls
-    const referrals = await query(
-      `SELECT
-        u.username,
-        u.email,
-        COALESCE(r.total_earned, 0) as total_earned,
-        r.created_at,
-        COALESCE(b.total_mining_count, 0) as total_mining_count,
-        COALESCE(b.frz_balance, 0) as frz_balance
-      FROM referrals r
-      JOIN users u ON u.id = r.referred_id
-      LEFT JOIN balances b ON b.user_id = r.referred_id
-      WHERE r.referrer_id = $1
-      ORDER BY r.created_at DESC
-      LIMIT 50`,
-      [userId]
-    )
-
-    const e = earnings.rows[0]
-    const count = referralCount
-
-    // Calculer le tier
-    let tier = 'bronze'
-    let nextTier = 'silver'
-    let nextTierCount = 5
-    if (count >= 15) { tier = 'gold'; nextTier = 'max'; nextTierCount = 0 }
-    else if (count >= 5) { tier = 'silver'; nextTier = 'gold'; nextTierCount = 15 }
-
-    return NextResponse.json({
-      referralCode: user.rows[0].referral_code,
-      tier,
-      nextTier,
-      nextTierCount,
-      referralCount: count,
-      earnings: {
-        n1: parseFloat(e.n1).toFixed(8),
-        n2: parseFloat(e.n2).toFixed(8),
-        n3: parseFloat(e.n3).toFixed(8),
-        total: parseFloat(e.total).toFixed(8),
-      },
-      referrals: referrals.rows.map((r: any) => ({
-        username: r.username
-          ? r.username.substring(0, 4) + '****'
-          : r.email
-            ? r.email.substring(0, 3) + '****'
-            : 'User****',
-        earned: parseFloat(r.total_earned).toFixed(8),
-        joinedAt: r.created_at,
-        miningCount: parseInt(r.total_mining_count) || 0,
-        balance: parseFloat(r.frz_balance).toFixed(8),
-      })),
-    })
-
-  } catch (error) {
-    console.error('Referral info error:', error)
+  } catch {
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

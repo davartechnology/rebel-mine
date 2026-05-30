@@ -1,66 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { query } from '@/lib/db'
+import pool from '@/lib/db'
+import jwt from 'jsonwebtoken'
+
+const SECRET = process.env.JWT_SECRET || 'shee-mine-secret-2024'
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const auth = req.headers.get('authorization')
+    if (!auth?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
+    const decoded = jwt.verify(auth.substring(7), SECRET) as { userId: string }
+    const client = await pool.connect()
+    try {
+      const result = await client.query(
+        `SELECT type, amount, created_at as "createdAt" 
+         FROM transactions WHERE user_id = $1 
+         ORDER BY created_at DESC LIMIT 50`,
+        [decoded.userId]
+      )
 
-    const { searchParams } = new URL(req.url)
-    const type = searchParams.get('type') || 'all'
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = 20
-    const offset = (page - 1) * limit
+      const transactions = result.rows
+      const totalEarned = transactions
+        .filter(t => t.type !== 'withdrawal')
+        .reduce((sum, t) => sum + parseFloat(t.amount), 0)
+      const totalMinings = transactions.filter(t => t.type === 'mining').length
 
-    let whereClause = 'WHERE user_id = $1'
-    const params: any[] = [session.user.id]
-
-    if (type !== 'all') {
-      if (type === 'mine') {
-        whereClause += ` AND type = 'mine'`
-      } else if (type === 'referral') {
-        whereClause += ` AND type IN ('referral_n1', 'referral_n2', 'referral_n3')`
-      } else if (type === 'withdrawal') {
-        whereClause += ` AND type = 'withdrawal'`
-      }
+      return NextResponse.json({ transactions, totalEarned, totalMinings })
+    } finally {
+      client.release()
     }
-
-    const result = await query(
-      `SELECT id, type, amount, description, status, created_at
-       FROM transactions
-       ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT ${limit} OFFSET ${offset}`,
-      params
-    )
-
-    const countResult = await query(
-      `SELECT COUNT(*) FROM transactions ${whereClause}`,
-      params
-    )
-
-    const transactions = result.rows.map((t: any) => ({
-      id: t.id,
-      type: t.type,
-      amount: parseFloat(t.amount).toFixed(8),
-      description: t.description,
-      status: t.status,
-      createdAt: t.created_at,
-    }))
-
-    return NextResponse.json({
-      transactions,
-      total: parseInt(countResult.rows[0].count),
-      page,
-      hasMore: offset + limit < parseInt(countResult.rows[0].count),
-    })
-
-  } catch (error) {
-    console.error('Transactions error:', error)
+  } catch {
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }
